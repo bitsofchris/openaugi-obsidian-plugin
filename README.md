@@ -1,4 +1,4 @@
-# Open Augi 
+# OpenAugi
 ## Voice to Self-Organizing Second Brain for Obsidian
 
 Unlock the power of voice capture and go faster.
