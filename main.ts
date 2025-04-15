@@ -1,11 +1,20 @@
-import { Plugin, TFile, Notice } from 'obsidian';
+import { Plugin, TFile, Notice, PluginSettingTab, App, Setting } from 'obsidian';
 import OpenAI from 'openai';
-import * as dotenv from 'dotenv';
 
-dotenv.config();
+interface TranscriptParserSettings {
+  apiKey: string;
+}
+
+const DEFAULT_SETTINGS: TranscriptParserSettings = {
+  apiKey: ''
+};
 
 export default class TranscriptParserPlugin extends Plugin {
+  settings: TranscriptParserSettings;
+
   async onload() {
+    await this.loadSettings();
+    
     // Ensure output directories exist
     await this.ensureDirectoriesExist();
     
@@ -31,6 +40,17 @@ export default class TranscriptParserPlugin extends Plugin {
         }
       }
     });
+
+    // Add settings tab
+    this.addSettingTab(new TranscriptParserSettingTab(this.app, this));
+  }
+
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 
   async ensureDirectoriesExist() {
@@ -61,8 +81,13 @@ export default class TranscriptParserPlugin extends Plugin {
     // Ensure output directories exist
     await this.ensureDirectoriesExist();
     
+    if (!this.settings.apiKey) {
+      new Notice('Please set your OpenAI API key in the plugin settings');
+      throw new Error('OpenAI API key not set');
+    }
+    
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: this.settings.apiKey
     });
 
     const prompt = `You will receive a raw transcript from voice notes. Identify all commands that start with the special token "AUGI" and parse them clearly.
@@ -109,5 +134,34 @@ Transcript:\n${content}`;
     } else {
       await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n'));
     }
+  }
+}
+
+class TranscriptParserSettingTab extends PluginSettingTab {
+  plugin: TranscriptParserPlugin;
+
+  constructor(app: App, plugin: TranscriptParserPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const {containerEl} = this;
+
+    containerEl.empty();
+
+    containerEl.createEl('h2', {text: 'OpenAugi Settings'});
+
+    new Setting(containerEl)
+      .setName('OpenAI API Key')
+      .setDesc('Your OpenAI API key')
+      .addText(text => text
+        .setPlaceholder('sk-...')
+        .setValue(this.plugin.settings.apiKey)
+        .onChange(async (value) => {
+          this.plugin.settings.apiKey = value;
+          await this.plugin.saveSettings();
+        })
+      );
   }
 }
