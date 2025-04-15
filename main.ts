@@ -1,4 +1,4 @@
-import { Plugin, TFile } from 'obsidian';
+import { Plugin, TFile, Notice } from 'obsidian';
 import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 
@@ -6,7 +6,46 @@ dotenv.config();
 
 export default class TranscriptParserPlugin extends Plugin {
   async onload() {
+    // Ensure output directories exist
+    await this.ensureDirectoriesExist();
+    
     this.watchFolder("transcripts");
+    
+    // Add a command to manually parse a transcript file
+    this.addCommand({
+      id: 'parse-transcript',
+      name: 'Parse Transcript',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile && activeFile.extension === 'md') {
+          try {
+            const content = await this.app.vault.read(activeFile);
+            await this.parseAndOutput(activeFile.basename, content);
+            new Notice(`Successfully parsed transcript: ${activeFile.basename}`);
+          } catch (error) {
+            console.error('Failed to parse transcript:', error);
+            new Notice('Failed to parse transcript. Check console for details.');
+          }
+        } else {
+          new Notice('Please open a markdown transcript file first');
+        }
+      }
+    });
+  }
+
+  async ensureDirectoriesExist() {
+    const dirs = [
+      "Parsed_Notes",
+      "Parsed_Notes/summaries",
+      "Parsed_Notes/notes"
+    ];
+    
+    for (const dir of dirs) {
+      const exists = await this.app.vault.adapter.exists(dir);
+      if (!exists) {
+        await this.app.vault.createFolder(dir);
+      }
+    }
   }
 
   watchFolder(folderPath: string) {
@@ -19,6 +58,9 @@ export default class TranscriptParserPlugin extends Plugin {
   }
 
   async parseAndOutput(filename: string, content: string) {
+    // Ensure output directories exist
+    await this.ensureDirectoriesExist();
+    
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     });

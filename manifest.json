@@ -1,9 +1,9 @@
 {
 	"id": "open-augi",
-	"name": "Open Augi - Voice to Self-Organizing Second Brain ",
+	"name": "OpenAugI",
 	"version": "0.0.1",
 	"minAppVersion": "0.0.1",
-	"description": "Open Augi allows you to use voice commands to create, edit, and organize your notes in Obsidian. Augmented Intelligence is the AI that empowers you to be your best self.",
+	"description": "Voice to Self-Organizing Second Brain. Open Augi allows you to use voice commands to create, edit, and organize your notes in Obsidian. Augmented Intelligence is the AI that empowers you to be your best self.",
 	"author": "Chris Lettieri",
 	"authorUrl": "https://bitsofchris.com",
 	"fundingUrl": "https://github.com/bitsofchris/open-augi-obsidian",
