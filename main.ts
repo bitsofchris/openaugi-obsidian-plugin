@@ -1,5 +1,4 @@
 import { Plugin, TFile, Notice, PluginSettingTab, App, Setting } from 'obsidian';
-import OpenAI from 'openai';
 
 interface TranscriptParserSettings {
   apiKey: string;
@@ -86,10 +85,6 @@ export default class TranscriptParserPlugin extends Plugin {
       throw new Error('OpenAI API key not set');
     }
     
-    const openai = new OpenAI({
-      apiKey: this.settings.apiKey
-    });
-
     const prompt = `You will receive a raw transcript from voice notes. Identify all commands that start with the special token "AUGI" and parse them clearly.
 
 Example commands:
@@ -106,33 +101,54 @@ Return strictly JSON:
 
 Transcript:\n${content}`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
-      messages: [{ role: 'user', content: prompt }]
-    });
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.settings.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-turbo',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7
+        })
+      });
 
-    const messageContent = response.choices[0].message.content;
-    if (!messageContent) {
-      throw new Error('No response content received from OpenAI');
-    }
-    const structuredData = JSON.parse(messageContent);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`OpenAI API error: ${response.status} ${errorData.error?.message || response.statusText}`);
+      }
 
-    // Output Summary
-    await this.app.vault.create(`Parsed_Notes/summaries/${filename}_summary.md`, structuredData.summary);
+      const responseData = await response.json();
+      const messageContent = responseData.choices[0].message.content;
+      
+      if (!messageContent) {
+        throw new Error('No response content received from OpenAI');
+      }
+      
+      const structuredData = JSON.parse(messageContent);
 
-    // Output Notes
-    for (const note of structuredData.notes) {
-      await this.app.vault.create(`Parsed_Notes/notes/${note.title}.md`, note.content);
-    }
+      // Output Summary
+      await this.app.vault.create(`Parsed_Notes/summaries/${filename}_summary.md`, structuredData.summary);
 
-    // Append Tasks
-    const tasksFile = this.app.vault.getAbstractFileByPath("Parsed_Notes/tasks.md");
-    if (tasksFile instanceof TFile) {
-      let existingTasks = await this.app.vault.read(tasksFile);
-      existingTasks += '\n' + structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n');
-      await this.app.vault.modify(tasksFile, existingTasks);
-    } else {
-      await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n'));
+      // Output Notes
+      for (const note of structuredData.notes) {
+        await this.app.vault.create(`Parsed_Notes/notes/${note.title}.md`, note.content);
+      }
+
+      // Append Tasks
+      const tasksFile = this.app.vault.getAbstractFileByPath("Parsed_Notes/tasks.md");
+      if (tasksFile instanceof TFile) {
+        let existingTasks = await this.app.vault.read(tasksFile);
+        existingTasks += '\n' + structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n');
+        await this.app.vault.modify(tasksFile, existingTasks);
+      } else {
+        await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n'));
+      }
+    } catch (error) {
+      console.error('Error calling OpenAI API:', error);
+      throw error;
     }
   }
 }
