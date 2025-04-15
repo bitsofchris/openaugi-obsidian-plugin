@@ -85,21 +85,51 @@ export default class TranscriptParserPlugin extends Plugin {
       throw new Error('OpenAI API key not set');
     }
     
-    const prompt = `You will receive a raw transcript from voice notes. Identify all commands that start with the special token "AUGI" and parse them clearly.
+    const prompt = `You are an expert parser of voice notes acting as an Obsidian agent. Your task is to parse raw transcripts from voice notes and extract the following:
 
-Example commands:
-- "AUGI create note titled XYZ" → Create a new note with title XYZ.
-- "AUGI summarize this" → Summarize preceding context.
-- "AUGI add task ABC" → Create a new task item.
+**Parsing Instructions:**
+First, generate atomic notes, then create summaries and tasks based on these notes.
 
-Return strictly JSON:
+1. **Atomic Notes**:
+   - Create atomic notes (one key idea per note).
+   - Include detailed, nuanced supporting information concisely.
+   - Avoid repetition and ensure each note is self-contained.
+   - Use Obsidian syntax for backlinks (\`[[Atomic Note Title]]\`) to reference other relevant atomic notes you've just created, only when genuinely relevant.
+
+2. **Tasks**:
+   - Identify clear actions or tasks to perform.
+   - Include Obsidian links (\`[[Atomic Note Title]]\`) to relevant atomic notes you've just created, but only when genuinely relevant.
+   - Not every note should have a task, only when relevant. Pay special attention to when the author gives explicit instructions to create tasks.
+
+3. **Summary**:
+   - Generate a short summary (1-3 sentences) distilling the key discussion points.
+   - Include Obsidian links (\`[[Atomic Note Title]]\`) to relevant atomic notes you've just created, but only when relevant.
+   - Links likely should be used here since the summary is pointing to the atomic notes you just created.
+
+**Special Parsing Instructions**:
+- Any explicit instructions given by the voice note's author will be indicated by the token "AUGI" or variants like "auggie", or "augi".
+- Commands starting with "AUGI" should trigger explicit parsing actions:
+
+Example Commands:
+- "AUGI create note titled XYZ": Create a note with title "XYZ" and relevant context.
+- "AUGI summarize this": Summarize preceding context.
+- "AUGI add task ABC": Add task "ABC" to task list.
+
+- Create explicit "Insight Blocks" for notable quotes or points only when relevant:
+> Insight: "Explicit notable point or quote."
+
+Return output strictly formatted as JSON:
+
 {
   "summary": "Short summary (ignoring commands)",
-  "notes": [{"title": "Note Title", "content": "Content"}],
-  "tasks": ["task 1", "task 2"]
+  "notes": [
+    {"title": "Note Title", "content": "Detailed content of the atomic note."}
+  ],
+  "tasks": ["- [ ] Task with optional link to atomic note if relevant"]
 }
 
-Transcript:\n${content}`;
+Transcript:
+${content}`;
 
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -109,9 +139,9 @@ Transcript:\n${content}`;
           'Authorization': `Bearer ${this.settings.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4-turbo',
+          model: 'gpt-4.1-mini-2025-04-14',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7
+          temperature: 0.2
         })
       });
 
