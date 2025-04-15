@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "open-augi",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -22,7 +22,5 @@
 		"typescript": "^4.7.4"
 	},
 	"dependencies": {
-		"dotenv": "^16.5.0",
-		"openai": "^4.94.0"
 	}
 }

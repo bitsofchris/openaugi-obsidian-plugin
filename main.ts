@@ -127,7 +127,23 @@ Transcript:\n${content}`;
         throw new Error('No response content received from OpenAI');
       }
       
-      const structuredData = JSON.parse(messageContent);
+      // Clean up the response content in case it contains markdown formatting
+      let cleanedContent = messageContent;
+      
+      // Remove markdown code blocks if present (```json or just ```)
+      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        cleanedContent = codeBlockMatch[1].trim();
+      }
+      
+      // Parse the JSON
+      let structuredData;
+      try {
+        structuredData = JSON.parse(cleanedContent);
+      } catch (parseError) {
+        console.error('Failed to parse JSON response:', cleanedContent);
+        throw new Error(`Failed to parse JSON response: ${parseError.message}`);
+      }
 
       // Output Summary
       await this.app.vault.create(`Parsed_Notes/summaries/${filename}_summary.md`, structuredData.summary);
