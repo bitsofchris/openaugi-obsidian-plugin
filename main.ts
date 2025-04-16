@@ -17,8 +17,6 @@ export default class TranscriptParserPlugin extends Plugin {
     // Ensure output directories exist
     await this.ensureDirectoriesExist();
     
-    this.watchFolder("transcripts");
-    
     // Add a command to manually parse a transcript file
     this.addCommand({
       id: 'parse-transcript',
@@ -67,16 +65,8 @@ export default class TranscriptParserPlugin extends Plugin {
     }
   }
 
-  watchFolder(folderPath: string) {
-    this.registerEvent(this.app.vault.on('create', async (file: TFile) => {
-      if (file.path.startsWith(folderPath)) {
-        const content = await this.app.vault.read(file);
-        await this.parseAndOutput(file.basename, content);
-      }
-    }));
-  }
-
   async parseAndOutput(filename: string, content: string) {
+    console.log("Parsing and outputting transcript:", filename);
     // Ensure output directories exist
     await this.ensureDirectoriesExist();
     
@@ -85,10 +75,17 @@ export default class TranscriptParserPlugin extends Plugin {
       throw new Error('OpenAI API key not set');
     }
     
-    const prompt = `You are an expert parser of voice notes acting as an Obsidian agent. Your task is to parse raw transcripts from voice notes and extract the following:
+    const prompt = `
+You are an expert parser of voice notes acting as an Obsidian agent. 
+Your goal is to help the speaker capture their thoughts and ideas in a way that is useful for them.
+When parsing, format atomic notes and summaries in Obsidian markdown that make it easy to read.
 
-**Parsing Instructions:**
-First, generate atomic notes, then create summaries and tasks based on these notes.
+**Special Parsing Instructions**:
+- Any explicit instructions given by the voice note's author will be indicated by the token "AUGI" or variants like "auggie", "augie", or "augi".
+- Use this special token to guide your parsing actions. You should above all else follow these instructions as best as you can.
+
+**By Default Parsing Instructions:**
+First, generate atomic notes, then create summaries and tasks based on these notes. 
 
 1. **Atomic Notes**:
    - Create atomic notes (one key idea per note).
@@ -102,21 +99,21 @@ First, generate atomic notes, then create summaries and tasks based on these not
    - Not every note should have a task, only when relevant. Pay special attention to when the author gives explicit instructions to create tasks.
 
 3. **Summary**:
-   - Generate a short summary (1-3 sentences) distilling the key discussion points.
+   - Generate a short summary (1-3 sentences) distilling the key discussion points of the entire voice note.
    - Include Obsidian links (\`[[Atomic Note Title]]\`) to relevant atomic notes you've just created, but only when relevant.
    - Links likely should be used here since the summary is pointing to the atomic notes you just created.
 
-**Special Parsing Instructions**:
-- Any explicit instructions given by the voice note's author will be indicated by the token "AUGI" or variants like "auggie", or "augi".
-- Commands starting with "AUGI" should trigger explicit parsing actions:
+4. **Journal**:
+   - This note type is optional and only if the author explicitly asks to write a journal entry or says this is a reflection.
+   - The journal entry should be written in the first person and use verbatim the words of the author.
+   - Don't do any summarizing, just look to merge duplicate points and remove fluff but save as close to possible the exact words of the author.
+   - These notes should have an Obsidian tag (\`#journal\`) at the end.
 
 Example Commands:
-- "AUGI create note titled XYZ": Create a note with title "XYZ" and relevant context.
-- "AUGI summarize this": Summarize preceding context.
-- "AUGI add task ABC": Add task "ABC" to task list.
-
-- Create explicit "Insight Blocks" for notable quotes or points only when relevant:
-> Insight: "Explicit notable point or quote."
+- "Auggie create note titled XYZ": Create a note with title "XYZ" and relevant context.
+- "augi summarize this": Summarize preceding context. 
+- "augie add task ABC": Add task "ABC" to task list.
+- "augie the above is a journal entry or reflection": Write a journal entry using the context recently above this command.
 
 Return output strictly formatted as JSON:
 
@@ -139,7 +136,8 @@ ${content}`;
           'Authorization': `Bearer ${this.settings.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini-2025-04-14',
+          // model: 'gpt-4.1-mini-2025-04-14',
+          model: 'gpt-4.1-2025-04-14',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.2
         })
@@ -187,10 +185,10 @@ ${content}`;
       const tasksFile = this.app.vault.getAbstractFileByPath("Parsed_Notes/tasks.md");
       if (tasksFile instanceof TFile) {
         let existingTasks = await this.app.vault.read(tasksFile);
-        existingTasks += '\n' + structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n');
+        existingTasks += '\n' + structuredData.tasks.map((task: string) => `${task}`).join('\n');
         await this.app.vault.modify(tasksFile, existingTasks);
       } else {
-        await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `- [ ] ${task}`).join('\n'));
+        await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `${task}`).join('\n'));
       }
     } catch (error) {
       console.error('Error calling OpenAI API:', error);
