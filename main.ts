@@ -83,7 +83,7 @@ export default class TranscriptParserPlugin extends Plugin {
     
 // Begin Prompt
     const prompt = `
-    You are an expert agent helping users process their voice notes into structured, useful Obsidian notes. Your mission is to capture the user's ideas, actions, and reflections in clean, atomic form. You act like a smart second brain, formatting output as Obsidian-ready markdown inside structured JSON.
+    You are an expert agent helping users process their voice notes into structured, useful Obsidian notes. Your mission is to capture the user's ideas, actions, and reflections in clean, atomic form. You act like a smart second brain, formatting output as Obsidian-ready markdown.
     
     # Special Command Handling
     - Commands will be marked with the special keyword **AUGI** or close variants ("augie", "auggie", "augi").
@@ -125,26 +125,9 @@ export default class TranscriptParserPlugin extends Plugin {
     
     # Reasoning Strategy
     1. **Plan first**: Before writing, identify structure in the speaker's thoughts.
-    2. **Group context**: Organize ideas around coherent units.
+    2. **Group context**: Organize ideas around coherent units. These units fomr the foundation of atomic notes.
     3. **Respect ambiguity**: When unsure, err on the side of creating a thoughtful atomic note.
     4. **Don't repeat**: Avoid redundancy across notes, tasks, or summary.
-    
-    # Output Format (STRICT)
-    Return a single JSON object formatted like this:
-    
-    
-    {
-      "summary": "Short 1–3 sentence summary (no commands included).",
-      "notes": [
-        {
-          "title": "Title of Atomic Note",
-          "content": "Markdown-formatted, self-contained idea with backlinks if relevant."
-        }
-      ],
-      "tasks": [
-        "- [ ] Do something important [[Related Atomic Note Title]]"
-      ]
-    }
       
 Transcript:
 ${content}`;
@@ -157,10 +140,52 @@ ${content}`;
           'Authorization': `Bearer ${this.settings.apiKey}`
         },
         body: JSON.stringify({
-          // model: 'gpt-4.1-mini-2025-04-14',
           model: 'gpt-4.1-2025-04-14',
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2
+          temperature: 0.2,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "transcript_parser",
+              schema: {
+                type: "object",
+                properties: {
+                  summary: {
+                    type: "string",
+                    description: "Short 1–3 sentence summary of the transcript (no commands included), backlinks to atomic notes should be included."
+                  },
+                  notes: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: {
+                          type: "string",
+                          description: "Title of the atomic note"
+                        },
+                        content: {
+                          type: "string",
+                          description: "Markdown-formatted, self-contained idea with backlinks if relevant"
+                        }
+                      },
+                      required: ["title", "content"],
+                      additionalProperties: false
+                    }
+                  },
+                  tasks: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      description: "Markdown-formatted task with checkbox"
+                    }
+                  }
+                },
+                required: ["summary", "notes", "tasks"],
+                additionalProperties: false
+              },
+              strict: true
+            },
+          }
         })
       });
 
@@ -170,36 +195,29 @@ ${content}`;
       }
 
       const responseData = await response.json();
-      const messageContent = responseData.choices[0].message.content;
+      const structuredData = responseData.choices[0].message.content;
       
-      if (!messageContent) {
-        throw new Error('No response content received from OpenAI');
+      // Check for API refusal - a new field available with structured outputs
+      if (responseData.choices[0].message.refusal) {
+        throw new Error(`API refusal: ${responseData.choices[0].message.refusal}`);
       }
       
-      // Clean up the response content in case it contains markdown formatting
-      let cleanedContent = messageContent;
-      
-      // Remove markdown code blocks if present (```json or just ```)
-      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        cleanedContent = codeBlockMatch[1].trim();
-      }
-      
-      // Parse the JSON
-      let structuredData;
+      // Parse the JSON (the content should already be valid JSON due to the response_format)
+      let parsedData;
       try {
-        structuredData = JSON.parse(cleanedContent);
+        // For newer API versions, the content might already be parsed
+        parsedData = typeof structuredData === 'string' ? JSON.parse(structuredData) : structuredData;
       } catch (parseError) {
-        console.error('Failed to parse JSON response:', cleanedContent);
+        console.error('Failed to parse JSON response:', structuredData);
         throw new Error(`Failed to parse JSON response: ${parseError.message}`);
       }
 
       // Format summary content with tasks included
-      let summaryContent = structuredData.summary;
+      let summaryContent = parsedData.summary;
       
       // Add tasks section if there are tasks
-      if (structuredData.tasks && structuredData.tasks.length > 0) {
-        summaryContent += '\n\n## Tasks\n' + structuredData.tasks.join('\n');
+      if (parsedData.tasks && parsedData.tasks.length > 0) {
+        summaryContent += '\n\n## Tasks\n' + parsedData.tasks.join('\n');
       }
       
       // Sanitize filename
@@ -209,7 +227,7 @@ ${content}`;
       await this.app.vault.create(`${this.settings.summaryFolder}/${sanitizedFilename} - summary.md`, summaryContent);
 
       // Output Notes
-      for (const note of structuredData.notes) {
+      for (const note of parsedData.notes) {
         // Sanitize note title for filename
         const sanitizedTitle = this.sanitizeFilename(note.title);
         await this.app.vault.create(`${this.settings.notesFolder}/${sanitizedTitle}.md`, note.content);
