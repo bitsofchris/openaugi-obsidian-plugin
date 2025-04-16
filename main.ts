@@ -2,10 +2,14 @@ import { Plugin, TFile, Notice, PluginSettingTab, App, Setting } from 'obsidian'
 
 interface TranscriptParserSettings {
   apiKey: string;
+  summaryFolder: string;
+  notesFolder: string;
 }
 
 const DEFAULT_SETTINGS: TranscriptParserSettings = {
-  apiKey: ''
+  apiKey: '',
+  summaryFolder: 'OpenAugi/Summaries',
+  notesFolder: 'OpenAugi/Notes'
 };
 
 export default class TranscriptParserPlugin extends Plugin {
@@ -13,9 +17,6 @@ export default class TranscriptParserPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
-    
-    // Ensure output directories exist
-    await this.ensureDirectoriesExist();
     
     // Add a command to manually parse a transcript file
     this.addCommand({
@@ -50,11 +51,16 @@ export default class TranscriptParserPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  // Sanitize filename to remove invalid characters
+  sanitizeFilename(filename: string): string {
+    // Replace characters that aren't allowed in filenames
+    return filename.replace(/[\\/:*?"<>|]/g, '-');
+  }
+
   async ensureDirectoriesExist() {
     const dirs = [
-      "Parsed_Notes",
-      "Parsed_Notes/summaries",
-      "Parsed_Notes/notes"
+      this.settings.summaryFolder,
+      this.settings.notesFolder
     ];
     
     for (const dir of dirs) {
@@ -103,25 +109,25 @@ export default class TranscriptParserPlugin extends Plugin {
     ### 3. Summary
     - Write a 1–3 sentence summary of **what was said**, not how it was said.
     - Highlight key concepts, questions raised, or insights.
-    - Use \`[[Backlinks]]\` to connect to relevant atomic notes mentioned formatted as a list.
+    - Use \`[[Backlinks]]\` to connect to all relevant atomic notes mentioned formatted as a list.
     
     ### 4. Journal Entry (Optional)
-    - Only create if explicitly asked (e.g. via: “augie this is a journal entry”).
+    - Only create if explicitly asked (e.g. via: "augie this is a journal entry").
     - Use **first-person**, preserve author's words as much as possible.
     - Clean up repetitions or filler, but stay true to original tone.
     - Add tag \`#journal\` at the end.
     
     # Example AUGI Commands
-    - **“Auggie create note titled XYZ”** → Create a note titled “XYZ”.
-    - **“augie summarize this”** → Summarize recent thoughts.
-    - **“augi add task ABC”** → Add task “ABC”.
-    - **“auggie the above is a journal entry”** → Capture verbatim reflection in journal format.
+    - **"Auggie create note titled XYZ"** → Create a note titled "XYZ".
+    - **"augie summarize this"** → Summarize recent thoughts.
+    - **"augi add task ABC"** → Add task "ABC".
+    - **"auggie the above is a journal entry"** → Capture verbatim reflection in journal format.
     
     # Reasoning Strategy
-    1. **Plan first**: Before writing, identify structure in the speaker’s thoughts.
+    1. **Plan first**: Before writing, identify structure in the speaker's thoughts.
     2. **Group context**: Organize ideas around coherent units.
     3. **Respect ambiguity**: When unsure, err on the side of creating a thoughtful atomic note.
-    4. **Don’t repeat**: Avoid redundancy across notes, tasks, or summary.
+    4. **Don't repeat**: Avoid redundancy across notes, tasks, or summary.
     
     # Output Format (STRICT)
     Return a single JSON object formatted like this:
@@ -188,22 +194,25 @@ ${content}`;
         throw new Error(`Failed to parse JSON response: ${parseError.message}`);
       }
 
-      // Output Summary
-      await this.app.vault.create(`Parsed_Notes/summaries/${filename}_summary.md`, structuredData.summary);
+      // Format summary content with tasks included
+      let summaryContent = structuredData.summary;
+      
+      // Add tasks section if there are tasks
+      if (structuredData.tasks && structuredData.tasks.length > 0) {
+        summaryContent += '\n\n## Tasks\n' + structuredData.tasks.join('\n');
+      }
+      
+      // Sanitize filename
+      const sanitizedFilename = this.sanitizeFilename(filename);
+      
+      // Output Summary with tasks
+      await this.app.vault.create(`${this.settings.summaryFolder}/${sanitizedFilename} - summary.md`, summaryContent);
 
       // Output Notes
       for (const note of structuredData.notes) {
-        await this.app.vault.create(`Parsed_Notes/notes/${note.title}.md`, note.content);
-      }
-
-      // Append Tasks
-      const tasksFile = this.app.vault.getAbstractFileByPath("Parsed_Notes/tasks.md");
-      if (tasksFile instanceof TFile) {
-        let existingTasks = await this.app.vault.read(tasksFile);
-        existingTasks += '\n' + structuredData.tasks.map((task: string) => `${task}`).join('\n');
-        await this.app.vault.modify(tasksFile, existingTasks);
-      } else {
-        await this.app.vault.create("Parsed_Notes/tasks.md", structuredData.tasks.map((task: string) => `${task}`).join('\n'));
+        // Sanitize note title for filename
+        const sanitizedTitle = this.sanitizeFilename(note.title);
+        await this.app.vault.create(`${this.settings.notesFolder}/${sanitizedTitle}.md`, note.content);
       }
     } catch (error) {
       console.error('Error calling OpenAI API:', error);
@@ -233,9 +242,44 @@ class TranscriptParserSettingTab extends PluginSettingTab {
       .addText(text => text
         .setPlaceholder('sk-...')
         .setValue(this.plugin.settings.apiKey)
+        .inputEl.type = 'password'
+      )
+      .addButton(button => button
+        .setButtonText(this.plugin.settings.apiKey ? 'Update' : 'Save')
+        .onClick(async () => {
+          const inputEl = button.buttonEl.parentElement?.querySelector('input');
+          if (inputEl) {
+            this.plugin.settings.apiKey = inputEl.value;
+            await this.plugin.saveSettings();
+            new Notice('API Key saved');
+            button.setButtonText('Update');
+          }
+        })
+      );
+    
+    new Setting(containerEl)
+      .setName('Summaries Folder')
+      .setDesc('Folder path where summary files will be saved')
+      .addText(text => text
+        .setPlaceholder('OpenAugi/Summaries')
+        .setValue(this.plugin.settings.summaryFolder)
         .onChange(async (value) => {
-          this.plugin.settings.apiKey = value;
+          this.plugin.settings.summaryFolder = value;
           await this.plugin.saveSettings();
+          await this.plugin.ensureDirectoriesExist();
+        })
+      );
+      
+    new Setting(containerEl)
+      .setName('Notes Folder')
+      .setDesc('Folder path where atomic notes will be saved')
+      .addText(text => text
+        .setPlaceholder('OpenAugi/Notes')
+        .setValue(this.plugin.settings.notesFolder)
+        .onChange(async (value) => {
+          this.plugin.settings.notesFolder = value;
+          await this.plugin.saveSettings();
+          await this.plugin.ensureDirectoriesExist();
         })
       );
   }
