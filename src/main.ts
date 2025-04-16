@@ -1,13 +1,16 @@
-import { Plugin, Notice, TFile } from 'obsidian';
+import { Plugin, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import { OpenAugiSettings, DEFAULT_SETTINGS } from './types/settings';
 import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
+import { LoadingIndicator } from './ui/loading-indicator';
+import { sanitizeFilename } from './utils/filename-utils';
 
 export default class OpenAugiPlugin extends Plugin {
   settings: OpenAugiSettings;
   openAIService: OpenAIService;
   fileService: FileService;
+  loadingIndicator: LoadingIndicator;
 
   async onload() {
     // Load settings
@@ -15,6 +18,14 @@ export default class OpenAugiPlugin extends Plugin {
     
     // Initialize services
     this.initializeServices();
+    
+    // Initialize loading indicator
+    this.app.workspace.onLayoutReady(() => {
+      const statusBar = this.addStatusBarItem();
+      if (statusBar.parentElement) {
+        this.loadingIndicator = new LoadingIndicator(statusBar.parentElement);
+      }
+    });
     
     // Add command to manually parse a transcript file
     this.addCommand({
@@ -47,15 +58,35 @@ export default class OpenAugiPlugin extends Plugin {
   }
 
   /**
+   * Open a file in a new tab
+   * @param filePath The path to the file to open
+   */
+  private async openFileInNewTab(filePath: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!file || !(file instanceof TFile)) {
+      console.error(`File not found: ${filePath}`);
+      return;
+    }
+
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.openFile(file);
+  }
+
+  /**
    * Process a transcript file
    * @param file The file to process
    */
   private async processTranscriptFile(file: TFile): Promise<void> {
     try {
+      // Show loading indicator
+      this.loadingIndicator?.show('Processing voice transcript');
+      
+      // Read file content
       const content = await this.app.vault.read(file);
       
       // Check if API key is set
       if (!this.settings.apiKey) {
+        this.loadingIndicator?.hide();
         new Notice('Please set your OpenAI API key in the plugin settings');
         return;
       }
@@ -69,8 +100,20 @@ export default class OpenAugiPlugin extends Plugin {
       // Write result to files
       await this.fileService.writeTranscriptFiles(file.basename, parsedData);
       
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+      
+      // Show success message
       new Notice(`Successfully parsed transcript: ${file.basename}`);
+      
+      // Open the summary file in a new tab
+      const sanitizedFilename = sanitizeFilename(file.basename);
+      const summaryPath = `${this.settings.summaryFolder}/${sanitizedFilename} - summary.md`;
+      await this.openFileInNewTab(summaryPath);
     } catch (error) {
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+      
       console.error('Failed to parse transcript:', error);
       new Notice('Failed to parse transcript. Check console for details.');
     }
