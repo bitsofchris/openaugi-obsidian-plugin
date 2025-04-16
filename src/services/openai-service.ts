@@ -90,6 +90,7 @@ ${content}`;
           model: 'gpt-4.1-2025-04-14',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.2,
+          max_tokens: 32768,
           response_format: {
             type: "json_schema",
             json_schema: {
