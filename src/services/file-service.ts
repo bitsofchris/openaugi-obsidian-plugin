@@ -1,5 +1,5 @@
 import { App, TFile, Vault } from 'obsidian';
-import { sanitizeFilename } from '../utils/filename-utils';
+import { sanitizeFilename, BacklinkMapper } from '../utils/filename-utils';
 import { TranscriptResponse } from '../types/transcript';
 
 /**
@@ -9,11 +9,13 @@ export class FileService {
   private vault: Vault;
   private summaryFolder: string;
   private notesFolder: string;
+  private backlinkMapper: BacklinkMapper;
 
   constructor(app: App, summaryFolder: string, notesFolder: string) {
     this.vault = app.vault;
     this.summaryFolder = summaryFolder;
     this.notesFolder = notesFolder;
+    this.backlinkMapper = new BacklinkMapper();
   }
 
   /**
@@ -45,12 +47,22 @@ export class FileService {
     // Sanitize filename
     const sanitizedFilename = sanitizeFilename(filename);
     
+    // Register all note titles for backlink processing
+    this.backlinkMapper = new BacklinkMapper(); // Reset the mapper
+    for (const note of data.notes) {
+      const sanitizedTitle = sanitizeFilename(note.title);
+      this.backlinkMapper.registerTitle(note.title, sanitizedTitle);
+    }
+    
     // Format summary content with tasks included
-    let summaryContent = data.summary;
+    let summaryContent = this.backlinkMapper.processBacklinks(data.summary);
     
     // Add tasks section if there are tasks
     if (data.tasks && data.tasks.length > 0) {
-      summaryContent += '\n\n## Tasks\n' + data.tasks.join('\n');
+      const processedTasks = data.tasks.map(task => 
+        this.backlinkMapper.processBacklinks(task)
+      );
+      summaryContent += '\n\n## Tasks\n' + processedTasks.join('\n');
     }
     
     // Output Summary with tasks
@@ -60,7 +72,9 @@ export class FileService {
     for (const note of data.notes) {
       // Sanitize note title for filename
       const sanitizedTitle = sanitizeFilename(note.title);
-      await this.vault.create(`${this.notesFolder}/${sanitizedTitle}.md`, note.content);
+      // Process content to ensure backlinks use sanitized filenames
+      const processedContent = this.backlinkMapper.processBacklinks(note.content);
+      await this.vault.create(`${this.notesFolder}/${sanitizedTitle}.md`, processedContent);
     }
   }
 } 
