@@ -1,0 +1,50 @@
+/* OpenAugi Plugin Styles */
+
+/* Status bar item styles */
+#openaugi-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-accent);
+}
+
+.openaugi-status-icon {
+  display: flex;
+  align-items: center;
+}
+
+.openaugi-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--text-accent);
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: openaugi-spin 1s linear infinite;
+}
+
+@keyframes openaugi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.openaugi-status-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.openaugi-loading-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.openaugi-dot {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  font-weight: bold;
+}
+
+.openaugi-dot.active {
+  opacity: 1;
+} 

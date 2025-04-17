@@ -25,65 +25,36 @@ export class LoadingIndicator {
     this.statusBarItem = this.statusBar.createEl('div', {
       cls: 'status-bar-item mod-clickable',
       attr: {
-        id: 'openaugi-status',
-        style: 'display: flex; align-items: center; gap: 8px; color: var(--text-accent);'
+        id: 'openaugi-status'
       }
     });
 
     // Create icon
     const iconEl = this.statusBarItem.createEl('span', {
-      cls: 'status-bar-item-icon',
-      attr: {
-        style: 'display: flex; align-items: center;'
-      }
+      cls: 'openaugi-status-icon'
     });
     
     // Create loading spinner
-    const spinner = iconEl.createEl('span', {
-      cls: 'openaugi-spinner',
-      attr: {
-        style: `
-          display: inline-block;
-          width: 14px;
-          height: 14px;
-          border: 2px solid var(--text-accent);
-          border-radius: 50%;
-          border-top-color: transparent;
-          animation: openaugi-spin 1s linear infinite;
-        `
-      }
+    iconEl.createEl('span', {
+      cls: 'openaugi-spinner'
     });
     
-    // Add CSS animation
-    const styleEl = document.head.createEl('style');
-    styleEl.textContent = `
-      @keyframes openaugi-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    `;
-    
     // Create text container
-    const textEl = this.statusBarItem.createEl('span', {
+    this.statusBarItem.createEl('span', {
       text: message,
-      attr: {
-        style: 'font-size: 13px; font-weight: 500;'
-      }
+      cls: 'openaugi-status-text'
     });
     
     // Create dot animation container
     this.loadingContainer = this.statusBarItem.createEl('span', {
-      attr: { style: 'display: flex; gap: 2px;' }
+      cls: 'openaugi-loading-dots'
     });
     
     // Create three dots for the animation
     for (let i = 0; i < 3; i++) {
       const dot = this.loadingContainer.createEl('span', {
         text: '.',
-        attr: {
-          style: 'opacity: 0; transition: opacity 0.3s ease; font-weight: bold;'
-        }
+        cls: 'openaugi-dot'
       });
       this.dotElements.push(dot);
     }
@@ -92,11 +63,11 @@ export class LoadingIndicator {
     let currentDot = 0;
     this.animationInterval = window.setInterval(() => {
       // Reset all dots
-      this.dotElements.forEach(dot => dot.style.opacity = '0');
+      this.dotElements.forEach(dot => dot.removeClass('active'));
       
       // Show dots up to current dot
       for (let i = 0; i <= currentDot; i++) {
-        this.dotElements[i].style.opacity = '1';
+        this.dotElements[i].addClass('active');
       }
       
       // Increment and wrap around
