@@ -64,5 +64,23 @@ export class OpenAugiSettingTab extends PluginSettingTab {
           await this.plugin.fileService.ensureDirectoriesExist();
         })
       );
+      
+    // Check if Dataview plugin is installed
+    // @ts-ignore - Dataview API is not typed
+    const dataviewPluginInstalled = this.app.plugins.plugins["dataview"] !== undefined;
+      
+    new Setting(containerEl)
+      .setName('Use Dataview Plugin')
+      .setDesc(dataviewPluginInstalled 
+        ? 'Process dataview queries in notes to find linked notes'
+        : 'Dataview plugin is not installed. Install it to enable this feature.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useDataviewIfAvailable)
+        .setDisabled(!dataviewPluginInstalled)
+        .onChange(async (value) => {
+          this.plugin.settings.useDataviewIfAvailable = value;
+          await this.plugin.saveSettings();
+        })
+      );
   }
 } 

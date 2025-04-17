@@ -83,7 +83,8 @@ export default class OpenAugiPlugin extends Plugin {
     );
     this.distillService = new DistillService(
       this.app,
-      this.openAIService
+      this.openAIService,
+      this.settings
     );
   }
 
@@ -170,14 +171,36 @@ export default class OpenAugiPlugin extends Plugin {
 
       // Update services with latest API key
       this.openAIService = new OpenAIService(this.settings.apiKey);
-      this.distillService = new DistillService(this.app, this.openAIService);
+      this.distillService = new DistillService(
+        this.app, 
+        this.openAIService,
+        this.settings
+      );
       
       // Get root content for initial notice
       const rootContent = await this.app.vault.read(rootFile);
-      new Notice(`Processing note: ${rootFile.basename}\nCharacters: ${rootContent.length}\nEst. Tokens: ${estimateTokens(rootContent)}`);
       
       // Get linked files
-      const linkedFiles = await this.distillService.getLinkedNotes(rootFile);
+      let linkedFiles = await this.distillService.getLinkedNotes(rootFile);
+      
+      // Deduplicate the linked files by path
+      const uniqueFiles = new Map<string, TFile>();
+      for (const file of linkedFiles) {
+        if (!uniqueFiles.has(file.path)) {
+          uniqueFiles.set(file.path, file);
+        }
+      }
+      
+      // Convert back to array
+      linkedFiles = Array.from(uniqueFiles.values());
+      
+      console.log(`Processing ${linkedFiles.length} unique linked files`);
+      
+      if (linkedFiles.length === 0) {
+        this.loadingIndicator?.hide();
+        new Notice('No linked notes found to distill');
+        return;
+      }
       
       // Aggregate linked content
       const { content: linkedContent, sourceNotes } = await this.distillService.aggregateContent(linkedFiles);
