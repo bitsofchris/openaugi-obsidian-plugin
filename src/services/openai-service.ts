@@ -1,4 +1,14 @@
-import { TranscriptResponse } from '../types/transcript';
+import { TranscriptResponse, DistillResponse } from '../types/transcript';
+
+/**
+ * A simple tokeinzer to estimate the number of tokens
+ * @param text Text to count tokens from
+ * @returns Approximate token count
+ */
+function estimateTokens(text: string): number {
+  // Rough estimate: 1 token is approximately 4 characters
+  return Math.ceil(text.length / 4);
+}
 
 /**
  * Service for handling OpenAI API calls
@@ -79,6 +89,10 @@ ${content}`;
 
     const prompt = this.getPrompt(content);
     
+    // Log prompt statistics
+    console.log('Transcript Prompt Character Count:', prompt.length);
+    console.log('Transcript Prompt Estimated Token Count:', estimateTokens(prompt));
+    
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -154,6 +168,141 @@ ${content}`;
       const parsedData: TranscriptResponse = typeof structuredData === 'string' 
         ? JSON.parse(structuredData) 
         : structuredData;
+        
+      return parsedData;
+    } catch (error) {
+      console.error('Error calling OpenAI API:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the distillation prompt for the OpenAI API
+   * @param content The aggregated content from linked notes
+   * @returns The formatted prompt
+   */
+  private getDistillPrompt(content: string): string {
+    return `
+    You are an expert knowledge curator helping users distill and organize information from their notes. Your task is to analyze multiple related notes and create a coherent set of atomic notes and a summary.
+    
+    # Instructions
+    Analyze the following notes carefully. Consider the title of the note to help you identify distinct concepts, ideas, and insights.
+    The title can be used to help you figure out what's relevant. Some titles might not be helpful in which case you should 
+    determine the intent and most relevant concepts from the content.
+    
+    ### 1. Create Atomic Notes
+    - Identify distinct concepts, ideas, and insights across all notes
+    - Deduplicate and merge overlapping ideas
+    - Any distinct idea should be a separate note
+    - Create self-contained atomic notes with one clear idea per note
+    - Include supporting details and context
+    - Use \`[[Obsidian backlinks]]\` between notes when relevant
+    - Avoid repetition across notes
+    
+    ### 2. Extract Tasks
+    - Identify any actionable tasks present in the notes
+    - Format as: \`- [ ] Description of task [[Linked Atomic Note]]\` (if relevant)
+    - Only include genuinely actionable items, it's okay if there are none
+    
+    ### 3. Create a Summary
+    - Write a concise summary that synthesizes the key concepts
+    - Highlight connections between ideas
+    - Use \`[[Backlinks]]\` to connect to relevant atomic notes
+    
+    # Content to Distill:
+    ${content}`;
+  }
+
+  /**
+   * Call the OpenAI API to distill content from linked notes
+   * @param content The aggregated content from linked notes
+   * @returns Distilled content data
+   */
+  async distillContent(content: string): Promise<DistillResponse> {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key not set');
+    }
+
+    const prompt = this.getDistillPrompt(content);
+    
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-2025-04-14',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 32768,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "distill_content",
+              schema: {
+                type: "object",
+                properties: {
+                  summary: {
+                    type: "string",
+                    description: "Concise summary that synthesizes the key concepts from all notes, with backlinks to atomic notes."
+                  },
+                  notes: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: {
+                          type: "string",
+                          description: "Title of the atomic note"
+                        },
+                        content: {
+                          type: "string",
+                          description: "Markdown-formatted, self-contained idea with backlinks if relevant"
+                        }
+                      },
+                      required: ["title", "content"],
+                      additionalProperties: false
+                    }
+                  },
+                  tasks: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      description: "Markdown-formatted task with checkbox"
+                    }
+                  }
+                },
+                required: ["summary", "notes", "tasks"],
+                additionalProperties: false
+              },
+              strict: true
+            },
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`OpenAI API error: ${response.status} ${errorData.error?.message || response.statusText}`);
+      }
+
+      const responseData = await response.json();
+      const structuredData = responseData.choices[0].message.content;
+      
+      // Check for API refusal
+      if (responseData.choices[0].message.refusal) {
+        throw new Error(`API refusal: ${responseData.choices[0].message.refusal}`);
+      }
+      
+      // Parse the JSON
+      const parsedData: DistillResponse = typeof structuredData === 'string' 
+        ? JSON.parse(structuredData) 
+        : structuredData;
+        
+      // Initialize sourceNotes as empty array (will be populated by DistillService)
+      parsedData.sourceNotes = [];
         
       return parsedData;
     } catch (error) {

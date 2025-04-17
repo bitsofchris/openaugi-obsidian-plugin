@@ -1,15 +1,27 @@
-import { Plugin, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { Plugin, Notice, TFile } from 'obsidian';
 import { OpenAugiSettings, DEFAULT_SETTINGS } from './types/settings';
 import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
+import { DistillService } from './services/distill-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
 import { sanitizeFilename } from './utils/filename-utils';
+
+/**
+ * A simple tokeinzer to estimate the number of tokens
+ * @param text Text to count tokens from
+ * @returns Approximate token count
+ */
+function estimateTokens(text: string): number {
+  // Rough estimate: 1 token is approximately 4 characters
+  return Math.ceil(text.length / 4);
+}
 
 export default class OpenAugiPlugin extends Plugin {
   settings: OpenAugiSettings;
   openAIService: OpenAIService;
   fileService: FileService;
+  distillService: DistillService;
   loadingIndicator: LoadingIndicator;
 
   async onload() {
@@ -41,6 +53,20 @@ export default class OpenAugiPlugin extends Plugin {
       }
     });
 
+    // Add command to distill linked notes
+    this.addCommand({
+      id: 'distill-notes',
+      name: 'Distill Linked Notes',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile && activeFile.extension === 'md') {
+          await this.distillLinkedNotes(activeFile);
+        } else {
+          new Notice('Please open a markdown file first');
+        }
+      }
+    });
+
     // Add settings tab
     this.addSettingTab(new OpenAugiSettingTab(this.app, this));
   }
@@ -54,6 +80,10 @@ export default class OpenAugiPlugin extends Plugin {
       this.app, 
       this.settings.summaryFolder, 
       this.settings.notesFolder
+    );
+    this.distillService = new DistillService(
+      this.app,
+      this.openAIService
     );
   }
 
@@ -91,6 +121,9 @@ export default class OpenAugiPlugin extends Plugin {
         return;
       }
 
+      // Display character and token count
+      new Notice(`Processing transcript: ${file.basename}\nCharacters: ${content.length}\nEst. Tokens: ${estimateTokens(content)}`);
+
       // Update openAIService with latest API key
       this.openAIService = new OpenAIService(this.settings.apiKey);
       
@@ -104,7 +137,7 @@ export default class OpenAugiPlugin extends Plugin {
       this.loadingIndicator?.hide();
       
       // Show success message
-      new Notice(`Successfully parsed transcript: ${file.basename}`);
+      new Notice(`Successfully parsed transcript: ${file.basename}\nCreated ${parsedData.notes.length} atomic notes`);
       
       // Open the summary file in a new tab
       const sanitizedFilename = sanitizeFilename(file.basename);
@@ -116,6 +149,70 @@ export default class OpenAugiPlugin extends Plugin {
       
       console.error('Failed to parse transcript:', error);
       new Notice('Failed to parse transcript. Check console for details.');
+    }
+  }
+
+  /**
+   * Distill linked notes
+   * @param rootFile The root file containing links to distill
+   */
+  private async distillLinkedNotes(rootFile: TFile): Promise<void> {
+    try {
+      // Show loading indicator
+      this.loadingIndicator?.show('Distilling linked notes');
+      
+      // Check if API key is set
+      if (!this.settings.apiKey) {
+        this.loadingIndicator?.hide();
+        new Notice('Please set your OpenAI API key in the plugin settings');
+        return;
+      }
+
+      // Update services with latest API key
+      this.openAIService = new OpenAIService(this.settings.apiKey);
+      this.distillService = new DistillService(this.app, this.openAIService);
+      
+      // Get root content for initial notice
+      const rootContent = await this.app.vault.read(rootFile);
+      new Notice(`Processing note: ${rootFile.basename}\nCharacters: ${rootContent.length}\nEst. Tokens: ${estimateTokens(rootContent)}`);
+      
+      // Get linked files
+      const linkedFiles = await this.distillService.getLinkedNotes(rootFile);
+      
+      // Aggregate linked content
+      const { content: linkedContent, sourceNotes } = await this.distillService.aggregateContent(linkedFiles);
+      
+      // Combine content
+      const combinedContent = `# Root Note: ${rootFile.basename}\n\n${rootContent}\n\n${linkedContent}`;
+      const combinedTokens = estimateTokens(combinedContent);
+      
+      // Show combined content notice
+      new Notice(`Combined content from ${linkedFiles.length} linked notes\nTotal characters: ${combinedContent.length}\nEst. total tokens: ${combinedTokens}`);
+      
+      // Distill content from linked notes
+      const distilledData = await this.distillService.distillFromRootNote(
+        rootFile, 
+        combinedContent, 
+        sourceNotes
+      );
+      
+      // Write result to files
+      const summaryPath = await this.fileService.writeDistilledFiles(rootFile, distilledData);
+      
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+      
+      // Show success message
+      new Notice(`Successfully distilled notes from: ${rootFile.basename}\nCreated ${distilledData.notes.length} atomic notes`);
+      
+      // Open the summary file in a new tab
+      await this.openFileInNewTab(summaryPath);
+    } catch (error) {
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+      
+      console.error('Failed to distill notes:', error);
+      new Notice('Failed to distill notes. Check console for details.');
     }
   }
 

@@ -3,8 +3,14 @@ export interface TranscriptNote {
   content: string;
 }
 
-export interface TranscriptResponse {
+export interface BaseResponse {
   summary: string;
   notes: TranscriptNote[];
   tasks: string[];
+}
+
+export interface TranscriptResponse extends BaseResponse {}
+
+export interface DistillResponse extends BaseResponse {
+  sourceNotes: string[]; // List of source note names that were distilled
 } 
