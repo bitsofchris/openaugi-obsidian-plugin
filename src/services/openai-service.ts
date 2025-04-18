@@ -21,12 +21,37 @@ export class OpenAIService {
   }
 
   /**
+   * Extract custom context instructions from content if they exist
+   * @param content The content to extract the context from
+   * @returns The extracted context or null if none exists
+   */
+  private extractCustomContext(content: string): string | null {
+    // Look for context: section in the content
+    const contextRegex = /```context:([\s\S]*?)```|context:([\s\S]*?)(?:\n\n|\n$|$)/;
+    const match = contextRegex.exec(content);
+    
+    if (match) {
+      // Return the first matching group that has content
+      const rawContext = (match[1] || match[2])?.trim() || null;
+      if (rawContext) {
+        return `# USER CONTEXT\nPlease apply these additional instructions when processing. The instructions should take priority to guide and focus what you should extract:\n${rawContext}`;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
    * Get the system prompt for the OpenAI API
    * @param content The transcript content
    * @returns The formatted prompt
    */
   private getPrompt(content: string): string {
-    return `
+    // Extract any custom context
+    const customContext = this.extractCustomContext(content);
+    
+    // Base prompt
+    let prompt = `
     You are an expert agent helping users process their voice notes into structured, useful Obsidian notes. Your mission is to capture the user's ideas, actions, and reflections in clean, atomic form. You act like a smart second brain, formatting output as Obsidian-ready markdown.
     
     # Special Command Handling
@@ -72,9 +97,17 @@ export class OpenAIService {
     2. **Group context**: Organize ideas around coherent units. These units fomr the foundation of atomic notes.
     3. **Respect ambiguity**: When unsure, err on the side of creating a thoughtful atomic note.
     4. **Don't repeat**: Avoid redundancy across notes, tasks, or summary.
-      
-Transcript:
-${content}`;
+    `;
+    
+    // Add custom context if available
+    if (customContext) {
+      prompt += `\n\n${customContext}`;
+    }
+    
+    // Add transcript content
+    prompt += `\n\nTranscript:\n${content}`;
+    
+    return prompt;
   }
 
   /**
@@ -182,7 +215,11 @@ ${content}`;
    * @returns The formatted prompt
    */
   private getDistillPrompt(content: string): string {
-    return `
+    // Extract any custom context from the content (which should include the root note)
+    const customContext = this.extractCustomContext(content);
+    
+    // Base prompt
+    let prompt = `
     You are an expert knowledge curator helping users distill and organize information from their notes. Your task is to analyze multiple related notes and create a coherent set of atomic notes and a summary.
     
     # Instructions
@@ -208,9 +245,17 @@ ${content}`;
     - Write a concise summary that synthesizes the key concepts
     - Highlight connections between ideas
     - Use \`[[Backlinks]]\` to connect to relevant atomic notes
+    `;
     
-    # Content to Distill:
-    ${content}`;
+    // Add custom context if available
+    if (customContext) {
+      prompt += `\n\n${customContext}`;
+    }
+    
+    // Add content to distill
+    prompt += `\n\n# Content to Distill:\n${content}`;
+    
+    return prompt;
   }
 
   /**
