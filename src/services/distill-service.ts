@@ -202,7 +202,7 @@ export class DistillService {
     
     if (file instanceof TFile) {
       // Avoid duplicate files
-      if (!files.some(existingFile => existingFile.path === file.path)) {
+      if (!files.some(existingFile => existingFile.path === file!.path)) {
         files.push(file);
       }
     }
