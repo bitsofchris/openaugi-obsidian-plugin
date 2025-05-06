@@ -190,7 +190,7 @@ export class DistillService {
     const resolvedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
     
     // Fallback to direct path resolution if needed
-    let file = null;
+    let file: TFile | null = null;
     if (resolvedFile instanceof TFile) {
       file = resolvedFile;
     } else if (!resolvedFile) {
