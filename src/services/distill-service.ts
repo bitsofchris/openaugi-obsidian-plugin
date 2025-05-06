@@ -316,7 +316,6 @@ export class DistillService {
     }
     
     const uniqueFileCount = processedFiles.size;
-    console.log(`Processed ${uniqueFileCount} unique files`);
     
     return { content: aggregatedContent, sourceNotes };
   }

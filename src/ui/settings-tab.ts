@@ -14,10 +14,8 @@ export class OpenAugiSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
-    containerEl.createEl('h2', {text: 'OpenAugi Settings'});
-
     new Setting(containerEl)
-      .setName('OpenAI API Key')
+      .setName('OpenAI API key')
       .setDesc('Your OpenAI API key')
       .addText(text => text
         .setPlaceholder('sk-...')
@@ -38,7 +36,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       );
     
     new Setting(containerEl)
-      .setName('Summaries Folder')
+      .setName('Summaries folder')
       .setDesc('Folder path where summary files will be saved')
       .addText(text => text
         .setPlaceholder('OpenAugi/Summaries')
@@ -52,7 +50,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       );
       
     new Setting(containerEl)
-      .setName('Notes Folder')
+      .setName('Notes folder')
       .setDesc('Folder path where atomic notes will be saved')
       .addText(text => text
         .setPlaceholder('OpenAugi/Notes')
@@ -70,7 +68,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
     const dataviewPluginInstalled = this.app.plugins.plugins["dataview"] !== undefined;
       
     new Setting(containerEl)
-      .setName('Use Dataview Plugin')
+      .setName('Use Dataview plugin')
       .setDesc(dataviewPluginInstalled 
         ? 'Process dataview queries in notes to find linked notes'
         : 'Dataview plugin is not installed. Install it to enable this feature.')

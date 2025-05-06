@@ -42,7 +42,7 @@ export default class OpenAugiPlugin extends Plugin {
     // Add command to manually parse a transcript file
     this.addCommand({
       id: 'parse-transcript',
-      name: 'Parse Transcript',
+      name: 'Parse transcript',
       callback: async () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile && activeFile.extension === 'md') {
@@ -56,7 +56,7 @@ export default class OpenAugiPlugin extends Plugin {
     // Add command to distill linked notes
     this.addCommand({
       id: 'distill-notes',
-      name: 'Distill Linked Notes',
+      name: 'Distill linked notes',
       callback: async () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile && activeFile.extension === 'md') {
@@ -193,8 +193,6 @@ export default class OpenAugiPlugin extends Plugin {
       
       // Convert back to array
       linkedFiles = Array.from(uniqueFiles.values());
-      
-      console.log(`Processing ${linkedFiles.length} unique linked files`);
       
       if (linkedFiles.length === 0) {
         this.loadingIndicator?.hide();

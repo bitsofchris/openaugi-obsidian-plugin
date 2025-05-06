@@ -122,10 +122,6 @@ export class OpenAIService {
 
     const prompt = this.getPrompt(content);
     
-    // Log prompt statistics
-    console.log('Transcript Prompt Character Count:', prompt.length);
-    console.log('Transcript Prompt Estimated Token Count:', estimateTokens(prompt));
-    
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
