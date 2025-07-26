@@ -5,7 +5,8 @@ import { FileService } from './services/file-service';
 import { DistillService } from './services/distill-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
-import { sanitizeFilename } from './utils/filename-utils';
+import { sanitizeFilename, createFileWithCollisionHandling } from './utils/filename-utils';
+import { RecentActivityModal, RecentActivityConfig } from './ui/recent-activity-modal';
 
 /**
  * A simple tokeinzer to estimate the number of tokens
@@ -64,6 +65,15 @@ export default class OpenAugiPlugin extends Plugin {
         } else {
           new Notice('Please open a markdown file first');
         }
+      }
+    });
+
+    // Add command to distill recent activity
+    this.addCommand({
+      id: 'distill-recent-activity',
+      name: 'Distill recent activity',
+      callback: async () => {
+        await this.distillRecentActivity();
       }
     });
 
@@ -177,9 +187,6 @@ export default class OpenAugiPlugin extends Plugin {
         this.settings
       );
       
-      // Get root content for initial notice
-      const rootContent = await this.app.vault.read(rootFile);
-      
       // Get linked files
       let linkedFiles = await this.distillService.getLinkedNotes(rootFile);
       
@@ -200,21 +207,15 @@ export default class OpenAugiPlugin extends Plugin {
         return;
       }
       
-      // Aggregate linked content
-      const { content: linkedContent, sourceNotes } = await this.distillService.aggregateContent(linkedFiles);
+      // Show notice about linked files
+      new Notice(`Found ${linkedFiles.length} linked notes to process.`);
       
-      // Combine content
-      const combinedContent = `# Root Note: ${rootFile.basename}\n\n${rootContent}\n\n${linkedContent}`;
-      const combinedTokens = estimateTokens(combinedContent);
-      
-      // Show combined content notice
-      new Notice(`Combined content from ${linkedFiles.length} linked notes\nTotal characters: ${combinedContent.length}\nEst. total tokens: ${combinedTokens}`);
-      
-      // Distill content from linked notes
+      // Let the distill service handle all the content aggregation (no time filtering)
       const distilledData = await this.distillService.distillFromRootNote(
-        rootFile, 
-        combinedContent, 
-        sourceNotes
+        rootFile,
+        undefined,
+        undefined,
+        0  // No time filtering for regular distill command
       );
       
       // Write result to files
@@ -245,5 +246,134 @@ export default class OpenAugiPlugin extends Plugin {
     await this.saveData(this.settings);
     // Reinitialize services with new settings
     this.initializeServices();
+  }
+
+  /**
+   * Distill recent activity based on user configuration
+   */
+  private async distillRecentActivity(): Promise<void> {
+    // Show configuration modal
+    const modal = new RecentActivityModal(
+      this.app,
+      this.settings.recentActivityDefaults,
+      async (config: RecentActivityConfig) => {
+        await this.executeRecentActivityDistill(config);
+      }
+    );
+    modal.open();
+  }
+
+  /**
+   * Execute the recent activity distillation with the given configuration
+   * @param config The configuration for recent activity distillation
+   */
+  private async executeRecentActivityDistill(config: RecentActivityConfig): Promise<void> {
+    try {
+      // Check API key
+      if (!this.settings.apiKey) {
+        new Notice('Please set your OpenAI API key in the settings');
+        return;
+      }
+
+      // Show loading indicator
+      this.loadingIndicator?.show('Discovering recent activity...');
+
+      // Update services with latest API key
+      this.openAIService = new OpenAIService(this.settings.apiKey);
+      this.distillService = new DistillService(
+        this.app, 
+        this.openAIService,
+        this.settings
+      );
+
+      // Get recently modified notes
+      const recentFiles = await this.distillService.getRecentlyModifiedNotes(
+        config.daysBack,
+        config.excludeFolders
+      );
+
+      if (recentFiles.length === 0 && !config.rootNote) {
+        this.loadingIndicator?.hide();
+        new Notice(`No notes modified in the last ${config.daysBack} days`);
+        return;
+      }
+
+      // Prepare files list including root note if provided
+      let allFiles = [...recentFiles];
+      if (config.rootNote && !recentFiles.some(f => f.path === config.rootNote!.path)) {
+        allFiles = [config.rootNote, ...recentFiles];
+      }
+
+      // Show notice about discovered files
+      const message = config.rootNote 
+        ? `Found ${recentFiles.length} recent notes plus root note: ${config.rootNote.basename}`
+        : `Found ${recentFiles.length} notes modified in the last ${config.daysBack} days`;
+      new Notice(message);
+
+      // Update loading message
+      this.loadingIndicator?.show('Processing recent activity...');
+
+      // Use appropriate time window for filtering
+      const timeWindow = config.filterJournalSections ? config.daysBack : 0;
+
+      // Create a synthetic root file for the distillation
+      const syntheticRootContent = `# Recent Activity Summary
+
+This is an automated summary of notes modified in the last ${config.daysBack} days.
+${config.rootNote ? `\nUsing [[${config.rootNote.basename}]] as context root.` : ''}
+
+## Recently Modified Notes:
+${allFiles.map(f => `- [[${f.basename}]]`).join('\n')}`;
+
+      // Ensure OpenAugi folder exists
+      if (!await this.app.vault.adapter.exists('OpenAugi')) {
+        await this.app.vault.createFolder('OpenAugi');
+      }
+      
+      // Create a temporary root file
+      const tempRootPath = `OpenAugi/temp-recent-activity-${Date.now()}.md`;
+      await createFileWithCollisionHandling(this.app.vault, tempRootPath, syntheticRootContent);
+      const tempRootFile = this.app.vault.getAbstractFileByPath(tempRootPath) as TFile;
+
+      // Aggregate content with time filtering
+      const { content: aggregatedContent, sourceNotes } = await this.distillService.aggregateContent(
+        allFiles,
+        timeWindow
+      );
+
+      // Combine with synthetic root content
+      const combinedContent = `# Recent Activity: Last ${config.daysBack} Days\n\n${syntheticRootContent}\n\n${aggregatedContent}`;
+
+      // Distill the recent activity
+      const distilledData = await this.distillService.distillFromRootNote(
+        tempRootFile,
+        combinedContent,
+        sourceNotes
+      );
+
+      // Update the distilled data to reflect recent activity
+      distilledData.summary = `## Recent Activity Summary (Last ${config.daysBack} Days)\n\n${distilledData.summary}`;
+
+      // Write result to files
+      const summaryPath = await this.fileService.writeDistilledFiles(tempRootFile, distilledData);
+
+      // Clean up temporary file
+      await this.app.vault.delete(tempRootFile);
+
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+
+      // Show success message
+      new Notice(`Successfully distilled recent activity\nCreated ${distilledData.notes.length} atomic notes`);
+
+      // Open the summary file in a new tab
+      await this.openFileInNewTab(summaryPath);
+    } catch (error) {
+      // Hide loading indicator
+      this.loadingIndicator?.hide();
+      
+      console.error('Failed to distill recent activity:', error);
+      new Notice('Failed to distill recent activity. Check console for details.');
+    }
   }
 } 

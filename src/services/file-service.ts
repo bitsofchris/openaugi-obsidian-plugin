@@ -1,5 +1,5 @@
 import { App, TFile, Vault } from 'obsidian';
-import { sanitizeFilename, BacklinkMapper } from '../utils/filename-utils';
+import { sanitizeFilename, BacklinkMapper, createFileWithCollisionHandling } from '../utils/filename-utils';
 import { TranscriptResponse, DistillResponse } from '../types/transcript';
 
 /**
@@ -66,7 +66,11 @@ export class FileService {
     }
     
     // Output Summary with tasks
-    await this.vault.create(`${this.summaryFolder}/${sanitizedFilename} - summary.md`, summaryContent);
+    await createFileWithCollisionHandling(
+      this.vault,
+      `${this.summaryFolder}/${sanitizedFilename} - summary.md`,
+      summaryContent
+    );
 
     // Output Notes
     for (const note of data.notes) {
@@ -74,7 +78,11 @@ export class FileService {
       const sanitizedTitle = sanitizeFilename(note.title);
       // Process content to ensure backlinks use sanitized filenames
       const processedContent = this.backlinkMapper.processBacklinks(note.content);
-      await this.vault.create(`${this.notesFolder}/${sanitizedTitle}.md`, processedContent);
+      await createFileWithCollisionHandling(
+        this.vault,
+        `${this.notesFolder}/${sanitizedTitle}.md`,
+        processedContent
+      );
     }
   }
 
@@ -117,8 +125,11 @@ export class FileService {
     }
     
     // Output Summary
-    const summaryPath = `${this.summaryFolder}/${sanitizedFilename} - distilled.md`;
-    await this.vault.create(summaryPath, summaryContent);
+    const summaryPath = await createFileWithCollisionHandling(
+      this.vault,
+      `${this.summaryFolder}/${sanitizedFilename} - distilled.md`,
+      summaryContent
+    );
 
     // Output Notes
     for (const note of data.notes) {
@@ -126,7 +137,11 @@ export class FileService {
       const sanitizedTitle = sanitizeFilename(note.title);
       // Process content to ensure backlinks use sanitized filenames
       const processedContent = this.backlinkMapper.processBacklinks(note.content);
-      await this.vault.create(`${this.notesFolder}/${sanitizedTitle}.md`, processedContent);
+      await createFileWithCollisionHandling(
+        this.vault,
+        `${this.notesFolder}/${sanitizedTitle}.md`,
+        processedContent
+      );
     }
     
     return summaryPath;

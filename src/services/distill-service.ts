@@ -1,4 +1,5 @@
 import { App, TFile, MetadataCache, Component } from 'obsidian';
+import { createFileWithCollisionHandling } from '../utils/filename-utils';
 import { OpenAIService } from './openai-service';
 import { DistillResponse } from '../types/transcript';
 import { OpenAugiSettings } from '../types/settings';
@@ -25,6 +26,93 @@ export class DistillService {
     this.app = app;
     this.openAIService = openAIService;
     this.settings = settings;
+  }
+
+  /**
+   * Log the distill input context to a file for debugging
+   * @param content The full content being sent to AI
+   * @param rootFileName The name of the root file being processed
+   */
+  private async logDistillContext(content: string, rootFileName: string): Promise<void> {
+    // Only log if enabled in settings
+    if (!this.settings.enableDistillLogging) {
+      return;
+    }
+    
+    try {
+      // Create log folder if it doesn't exist
+      const logFolderPath = 'OpenAugi/Logs';
+      if (!await this.app.vault.adapter.exists(logFolderPath)) {
+        await this.app.vault.createFolder(logFolderPath);
+      }
+
+      // Create timestamp for log file
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFileName = `distill-log-${rootFileName}-${timestamp}.md`;
+      const logFilePath = `${logFolderPath}/${logFileName}`;
+
+      // Format log content
+      const logContent = `# Distill Context Log
+**Root File**: ${rootFileName}
+**Timestamp**: ${new Date().toISOString()}
+**Total Characters**: ${content.length}
+**Estimated Tokens**: ${estimateTokens(content)}
+
+---
+
+## Full Input Context:
+
+${content}
+
+---
+*End of log*`;
+
+      // Write log file
+      await createFileWithCollisionHandling(this.app.vault, logFilePath, logContent);
+      
+      console.log(`Distill context logged to: ${logFilePath}`);
+    } catch (error) {
+      console.error('Failed to log distill context:', error);
+    }
+  }
+
+  /**
+   * Get recently modified notes based on specified criteria
+   * @param daysBack Number of days to look back
+   * @param excludeFolders Folders to exclude from search
+   * @returns Array of recently modified files
+   */
+  async getRecentlyModifiedNotes(daysBack: number, excludeFolders: string[]): Promise<TFile[]> {
+    const cutoffTime = Date.now() - (daysBack * 24 * 60 * 60 * 1000);
+    const recentFiles: TFile[] = [];
+    
+    const files = this.app.vault.getMarkdownFiles();
+    
+    for (const file of files) {
+      // Check if file is in excluded folder
+      const isExcluded = excludeFolders.some(folder => 
+        file.path.startsWith(folder + '/') || file.path.includes('/' + folder + '/')
+      );
+      
+      if (isExcluded) {
+        continue;
+      }
+      
+      // Check modification time
+      const stats = await this.app.vault.adapter.stat(file.path);
+      if (stats && stats.mtime >= cutoffTime) {
+        recentFiles.push(file);
+      }
+    }
+    
+    // Sort by modification time, most recent first
+    recentFiles.sort((a, b) => {
+      const aStats = this.app.vault.adapter.stat(a.path);
+      const bStats = this.app.vault.adapter.stat(b.path);
+      return (bStats as any).mtime - (aStats as any).mtime;
+    });
+    
+    return recentFiles;
   }
 
   /**
@@ -290,11 +378,171 @@ export class DistillService {
   }
 
   /**
+   * Convert date format string to regex pattern
+   * @param format The date format string (e.g., "### YYYY-MM-DD")
+   * @returns Regex pattern for matching date headers
+   */
+  private dateFormatToRegex(format: string): RegExp {
+    // Escape special regex characters except for the date placeholders
+    let pattern = format
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')  // Escape special chars
+      .replace(/YYYY/g, '\\d{4}')               // Replace YYYY with year pattern
+      .replace(/MM/g, '\\d{2}')                 // Replace MM with month pattern
+      .replace(/DD/g, '\\d{2}');                // Replace DD with day pattern
+    
+    return new RegExp(`^${pattern}\\s*$`, 'm');
+  }
+
+  /**
+   * Extract date from header using the configured format
+   * @param header The header line to parse
+   * @param format The date format string
+   * @returns Date object or null if not a valid date header
+   */
+  private extractDateFromHeader(header: string, format: string): Date | null {
+    const regex = this.dateFormatToRegex(format);
+    if (!regex.test(header)) {
+      return null;
+    }
+
+    // Find positions of date components in format
+    const yearPos = format.indexOf('YYYY');
+    const monthPos = format.indexOf('MM');
+    const dayPos = format.indexOf('DD');
+
+    if (yearPos === -1 || monthPos === -1 || dayPos === -1) {
+      return null;
+    }
+
+    // Extract date components from the header at the same positions
+    const year = header.substr(yearPos, 4);
+    const month = header.substr(monthPos, 2);
+    const day = header.substr(dayPos, 2);
+
+    // Validate extracted values are numbers
+    if (!/^\d{4}$/.test(year) || !/^\d{2}$/.test(month) || !/^\d{2}$/.test(day)) {
+      return null;
+    }
+
+    const date = new Date(`${year}-${month}-${day}T00:00:00`);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  /**
+   * Check if a note is journal-style (contains headers with configured date format)
+   * @param content The content to check
+   * @returns True if the note contains date headers
+   */
+  private isJournalStyleNote(content: string): boolean {
+    const dateFormat = this.settings.recentActivityDefaults.dateHeaderFormat;
+    const dateHeaderRegex = this.dateFormatToRegex(dateFormat);
+    return dateHeaderRegex.test(content);
+  }
+
+  /**
+   * Parse a date from a header
+   * @param header The header line to parse
+   * @returns Date object or null if not a valid date header
+   */
+  private parseDateFromHeader(header: string): Date | null {
+    const dateFormat = this.settings.recentActivityDefaults.dateHeaderFormat;
+    return this.extractDateFromHeader(header, dateFormat);
+  }
+
+  /**
+   * Extract sections from content based on date headers
+   * @param content The content to parse
+   * @returns Array of sections with their dates
+   */
+  private getDateSections(content: string): Array<{date: Date | null, content: string}> {
+    const lines = content.split('\n');
+    const sections: Array<{date: Date | null, content: string}> = [];
+    let currentSection: string[] = [];
+    let currentDate: Date | null = null;
+    let hasFoundFirstDate = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const parsedDate = this.parseDateFromHeader(line);
+
+      if (parsedDate) {
+        // Found a date header
+        if (!hasFoundFirstDate) {
+          // First date header - save any content before it as undated
+          if (currentSection.length > 0) {
+            sections.push({
+              date: null,
+              content: currentSection.join('\n').trim()
+            });
+          }
+          hasFoundFirstDate = true;
+        } else if (currentSection.length > 0) {
+          // Save the previous section
+          sections.push({
+            date: currentDate,
+            content: currentSection.join('\n').trim()
+          });
+        }
+
+        // Start new section with the date header
+        currentDate = parsedDate;
+        currentSection = [line];
+      } else {
+        // Regular content line
+        currentSection.push(line);
+      }
+    }
+
+    // Don't forget the last section
+    if (currentSection.length > 0) {
+      sections.push({
+        date: currentDate,
+        content: currentSection.join('\n').trim()
+      });
+    }
+
+    return sections;
+  }
+
+  /**
+   * Extract content from a note within a specific date range
+   * @param content The full note content
+   * @param daysBack Number of days to look back from today
+   * @returns Filtered content within the date range
+   */
+  private extractContentByDateRange(content: string, daysBack: number): string {
+    if (!this.isJournalStyleNote(content)) {
+      // Not a journal-style note, return full content
+      return content;
+    }
+
+    const sections = this.getDateSections(content);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+    cutoffDate.setHours(0, 0, 0, 0);
+
+    const filteredSections: string[] = [];
+
+    for (const section of sections) {
+      if (section.date === null) {
+        // Include undated content (header/intro)
+        filteredSections.push(section.content);
+      } else if (section.date >= cutoffDate) {
+        // Include sections within the date range
+        filteredSections.push(section.content);
+      }
+    }
+
+    return filteredSections.join('\n\n');
+  }
+
+  /**
    * Aggregate content from a set of files
    * @param files Array of files to aggregate content from
+   * @param timeWindowDays Optional time window in days for filtering journal content
    * @returns Aggregated content as string along with source file names
    */
-  async aggregateContent(files: TFile[]): Promise<{content: string, sourceNotes: string[]}> {
+  async aggregateContent(files: TFile[], timeWindowDays?: number): Promise<{content: string, sourceNotes: string[]}> {
     let aggregatedContent = "";
     const sourceNotes: string[] = [];
     
@@ -307,7 +555,18 @@ export class DistillService {
         continue;
       }
       
-      const content = await this.app.vault.read(file);
+      let content = await this.app.vault.read(file);
+      
+      // Apply time filtering if specified
+      if (timeWindowDays !== undefined && timeWindowDays > 0) {
+        content = this.extractContentByDateRange(content, timeWindowDays);
+        
+        // Skip this file if no content remains after filtering
+        if (!content.trim()) {
+          continue;
+        }
+      }
+      
       aggregatedContent += `\n\n# Note: ${file.basename}\n\n${content}`;
       sourceNotes.push(file.basename);
       
@@ -325,12 +584,14 @@ export class DistillService {
    * @param rootFile The root note file to distill from
    * @param preparedContent Optional preprocessed combined content
    * @param preparedSourceNotes Optional preprocessed source notes
+   * @param timeWindowDays Optional time window in days for filtering journal content
    * @returns Distilled content as a DistillResponse
    */
   async distillFromRootNote(
     rootFile: TFile, 
     preparedContent?: string, 
-    preparedSourceNotes?: string[]
+    preparedSourceNotes?: string[],
+    timeWindowDays?: number
   ): Promise<DistillResponse> {
     let combinedContent: string;
     let sourceNotes: string[];
@@ -344,16 +605,24 @@ export class DistillService {
       const linkedFiles = await this.getLinkedNotes(rootFile);
       
       // Get content from root note
-      const rootContent = await this.app.vault.read(rootFile);
+      let rootContent = await this.app.vault.read(rootFile);
       
-      // Aggregate content from all linked notes
-      const aggregatedResult = await this.aggregateContent(linkedFiles);
+      // Apply time filtering to root note if specified
+      if (timeWindowDays !== undefined && timeWindowDays > 0) {
+        rootContent = this.extractContentByDateRange(rootContent, timeWindowDays);
+      }
+      
+      // Aggregate content from all linked notes with time filtering
+      const aggregatedResult = await this.aggregateContent(linkedFiles, timeWindowDays);
       const linkedContent = aggregatedResult.content;
       sourceNotes = aggregatedResult.sourceNotes;
       
       // Combine root content with linked content
       combinedContent = `# Root Note: ${rootFile.basename}\n\n${rootContent}\n\n${linkedContent}`;
     }
+    
+    // Log the combined content before sending to AI
+    await this.logDistillContext(combinedContent, rootFile.basename);
     
     // Send to OpenAI for distillation
     const distilledContent = await this.openAIService.distillContent(combinedContent);
