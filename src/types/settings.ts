@@ -11,6 +11,7 @@ export interface OpenAugiSettings {
   apiKey: string;
   summaryFolder: string;
   notesFolder: string;
+  promptsFolder: string;
   useDataviewIfAvailable: boolean;
   enableDistillLogging: boolean;
   recentActivityDefaults: RecentActivitySettings;
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
   apiKey: '',
   summaryFolder: 'OpenAugi/Summaries',
   notesFolder: 'OpenAugi/Notes',
+  promptsFolder: 'OpenAugi/Prompts',
   useDataviewIfAvailable: true,
   enableDistillLogging: false,
   recentActivityDefaults: {

@@ -7,6 +7,7 @@ import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
 import { sanitizeFilename, createFileWithCollisionHandling } from './utils/filename-utils';
 import { RecentActivityModal, RecentActivityConfig } from './ui/recent-activity-modal';
+import { PromptSelectionModal, PromptSelectionConfig } from './ui/prompt-selection-modal';
 
 /**
  * A simple tokeinzer to estimate the number of tokens
@@ -168,6 +169,23 @@ export default class OpenAugiPlugin extends Plugin {
    * @param rootFile The root file containing links to distill
    */
   private async distillLinkedNotes(rootFile: TFile): Promise<void> {
+    // Show prompt selection modal
+    const modal = new PromptSelectionModal(
+      this.app,
+      this.settings.promptsFolder,
+      async (config: PromptSelectionConfig) => {
+        await this.executeDistillLinkedNotes(rootFile, config);
+      }
+    );
+    modal.open();
+  }
+
+  /**
+   * Execute the distillation of linked notes with the selected prompt configuration
+   * @param rootFile The root note file
+   * @param promptConfig The prompt configuration from the modal
+   */
+  private async executeDistillLinkedNotes(rootFile: TFile, promptConfig: PromptSelectionConfig): Promise<void> {
     try {
       // Show loading indicator
       this.loadingIndicator?.show('Distilling linked notes');
@@ -210,12 +228,24 @@ export default class OpenAugiPlugin extends Plugin {
       // Show notice about linked files
       new Notice(`Found ${linkedFiles.length} linked notes to process.`);
       
+      // Read custom prompt if selected
+      let customPrompt: string | undefined;
+      if (promptConfig.useCustomPrompt && promptConfig.selectedPrompt) {
+        try {
+          customPrompt = await this.app.vault.read(promptConfig.selectedPrompt);
+        } catch (error) {
+          console.error('Failed to read custom prompt:', error);
+          new Notice('Failed to read custom prompt, using default');
+        }
+      }
+      
       // Let the distill service handle all the content aggregation (no time filtering)
       const distilledData = await this.distillService.distillFromRootNote(
         rootFile,
         undefined,
         undefined,
-        0  // No time filtering for regular distill command
+        0,  // No time filtering for regular distill command
+        customPrompt
       );
       
       // Write result to files
@@ -257,7 +287,15 @@ export default class OpenAugiPlugin extends Plugin {
       this.app,
       this.settings.recentActivityDefaults,
       async (config: RecentActivityConfig) => {
-        await this.executeRecentActivityDistill(config);
+        // After recent activity config, show prompt selection
+        const promptModal = new PromptSelectionModal(
+          this.app,
+          this.settings.promptsFolder,
+          async (promptConfig: PromptSelectionConfig) => {
+            await this.executeRecentActivityDistill(config, promptConfig);
+          }
+        );
+        promptModal.open();
       }
     );
     modal.open();
@@ -266,8 +304,9 @@ export default class OpenAugiPlugin extends Plugin {
   /**
    * Execute the recent activity distillation with the given configuration
    * @param config The configuration for recent activity distillation
+   * @param promptConfig The prompt configuration from the modal
    */
-  private async executeRecentActivityDistill(config: RecentActivityConfig): Promise<void> {
+  private async executeRecentActivityDistill(config: RecentActivityConfig, promptConfig: PromptSelectionConfig): Promise<void> {
     try {
       // Check API key
       if (!this.settings.apiKey) {
@@ -286,15 +325,23 @@ export default class OpenAugiPlugin extends Plugin {
         this.settings
       );
 
-      // Get recently modified notes
-      const recentFiles = await this.distillService.getRecentlyModifiedNotes(
-        config.daysBack,
-        config.excludeFolders
-      );
+      // Use selected notes if provided, otherwise get all recent notes
+      let recentFiles: TFile[];
+      if (config.selectedNotes && config.selectedNotes.length > 0) {
+        recentFiles = config.selectedNotes;
+      } else {
+        // Fallback to getting all recent notes (shouldn't happen with new UI)
+        recentFiles = await this.distillService.getRecentlyModifiedNotes(
+          config.daysBack,
+          config.excludeFolders,
+          config.useDateRange ? config.fromDate : undefined,
+          config.useDateRange ? config.toDate : undefined
+        );
+      }
 
       if (recentFiles.length === 0 && !config.rootNote) {
         this.loadingIndicator?.hide();
-        new Notice(`No notes modified in the last ${config.daysBack} days`);
+        new Notice(`No notes selected for processing`);
         return;
       }
 
@@ -306,8 +353,8 @@ export default class OpenAugiPlugin extends Plugin {
 
       // Show notice about discovered files
       const message = config.rootNote 
-        ? `Found ${recentFiles.length} recent notes plus root note: ${config.rootNote.basename}`
-        : `Found ${recentFiles.length} notes modified in the last ${config.daysBack} days`;
+        ? `Processing ${recentFiles.length} selected notes plus root note: ${config.rootNote.basename}`
+        : `Processing ${recentFiles.length} selected notes`;
       new Notice(message);
 
       // Update loading message
@@ -317,9 +364,16 @@ export default class OpenAugiPlugin extends Plugin {
       const timeWindow = config.filterJournalSections ? config.daysBack : 0;
 
       // Create a synthetic root file for the distillation
+      let timeWindowDesc: string;
+      if (config.useDateRange && config.fromDate && config.toDate) {
+        timeWindowDesc = `from ${config.fromDate} to ${config.toDate}`;
+      } else {
+        timeWindowDesc = `in the last ${config.daysBack} days`;
+      }
+      
       const syntheticRootContent = `# Recent Activity Summary
 
-This is an automated summary of notes modified in the last ${config.daysBack} days.
+This is an automated summary of notes modified ${timeWindowDesc}.
 ${config.rootNote ? `\nUsing [[${config.rootNote.basename}]] as context root.` : ''}
 
 ## Recently Modified Notes:
@@ -342,17 +396,38 @@ ${allFiles.map(f => `- [[${f.basename}]]`).join('\n')}`;
       );
 
       // Combine with synthetic root content
-      const combinedContent = `# Recent Activity: Last ${config.daysBack} Days\n\n${syntheticRootContent}\n\n${aggregatedContent}`;
+      const combinedContent = `# Recent Activity: ${timeWindowDesc}\n\n${syntheticRootContent}\n\n${aggregatedContent}`;
+
+      // Read custom prompt if selected
+      let customPrompt: string | undefined;
+      if (promptConfig.useCustomPrompt && promptConfig.selectedPrompt) {
+        try {
+          customPrompt = await this.app.vault.read(promptConfig.selectedPrompt);
+        } catch (error) {
+          console.error('Failed to read custom prompt:', error);
+          new Notice('Failed to read custom prompt, using default');
+        }
+      }
 
       // Distill the recent activity
       const distilledData = await this.distillService.distillFromRootNote(
         tempRootFile,
         combinedContent,
-        sourceNotes
+        sourceNotes,
+        undefined,  // No time window needed here since we already filtered
+        customPrompt
       );
 
       // Update the distilled data to reflect recent activity
-      distilledData.summary = `## Recent Activity Summary (Last ${config.daysBack} Days)\n\n${distilledData.summary}`;
+      const summaryTimeDesc = config.useDateRange && config.fromDate && config.toDate
+        ? `${config.fromDate} to ${config.toDate}`
+        : `Last ${config.daysBack} Days`;
+      distilledData.summary = `## Recent Activity Summary (${summaryTimeDesc})\n\n${distilledData.summary}`;
+      
+      // Remove the temp file from source notes before writing
+      distilledData.sourceNotes = distilledData.sourceNotes?.filter(
+        note => !note.includes('temp-recent-activity')
+      );
 
       // Write result to files
       const summaryPath = await this.fileService.writeDistilledFiles(tempRootFile, distilledData);

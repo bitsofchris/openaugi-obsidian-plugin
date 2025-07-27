@@ -47,4 +47,45 @@
 
 .openaugi-dot.active {
   opacity: 1;
+}
+
+/* Prompt Selection Modal Styles */
+.openaugi-prompt-description {
+  color: var(--text-muted);
+  margin-bottom: 1em;
+}
+
+.openaugi-prompt-warning {
+  color: var(--text-warning);
+  background-color: var(--background-modifier-warning);
+  padding: 0.5em;
+  border-radius: 4px;
+  margin: 1em 0;
+}
+
+.openaugi-prompt-preview {
+  margin-top: 1em;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 1em;
+  background-color: var(--background-secondary);
+}
+
+.openaugi-prompt-preview h4 {
+  margin-top: 0;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.openaugi-prompt-preview-content {
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--text-normal);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.openaugi-prompt-error {
+  color: var(--text-error);
+  font-style: italic;
 } 

@@ -80,10 +80,37 @@ ${content}
    * Get recently modified notes based on specified criteria
    * @param daysBack Number of days to look back
    * @param excludeFolders Folders to exclude from search
+   * @param fromDate Optional start date for date range mode
+   * @param toDate Optional end date for date range mode
    * @returns Array of recently modified files
    */
-  async getRecentlyModifiedNotes(daysBack: number, excludeFolders: string[]): Promise<TFile[]> {
-    const cutoffTime = Date.now() - (daysBack * 24 * 60 * 60 * 1000);
+  async getRecentlyModifiedNotes(
+    daysBack: number, 
+    excludeFolders: string[], 
+    fromDate?: string, 
+    toDate?: string
+  ): Promise<TFile[]> {
+    let startTime: number;
+    let endTime: number;
+    let cutoffDate: Date;
+    
+    if (fromDate && toDate) {
+      // Use date range
+      const from = new Date(fromDate);
+      from.setHours(0, 0, 0, 0);
+      startTime = from.getTime();
+      cutoffDate = from;
+      
+      const to = new Date(toDate);
+      to.setHours(23, 59, 59, 999);
+      endTime = to.getTime();
+    } else {
+      // Use days back
+      endTime = Date.now();
+      startTime = endTime - (daysBack * 24 * 60 * 60 * 1000);
+      cutoffDate = new Date(startTime);
+    }
+    
     const recentFiles: TFile[] = [];
     
     const files = this.app.vault.getMarkdownFiles();
@@ -98,21 +125,43 @@ ${content}
         continue;
       }
       
-      // Check modification time
-      const stats = await this.app.vault.adapter.stat(file.path);
-      if (stats && stats.mtime >= cutoffTime) {
+      let includeFile = false;
+      
+      // First, check if filename starts with a date
+      const filenameDate = this.extractDateFromFilename(file.basename);
+      if (filenameDate) {
+        const fileTime = filenameDate.getTime();
+        if (fileTime >= startTime && fileTime <= endTime) {
+          includeFile = true;
+        }
+      }
+      
+      // If not included by filename date, check modification time
+      if (!includeFile) {
+        const stats = await this.app.vault.adapter.stat(file.path);
+        if (stats && stats.mtime >= startTime && stats.mtime <= endTime) {
+          includeFile = true;
+        }
+      }
+      
+      if (includeFile) {
         recentFiles.push(file);
       }
     }
     
-    // Sort by modification time, most recent first
-    recentFiles.sort((a, b) => {
-      const aStats = this.app.vault.adapter.stat(a.path);
-      const bStats = this.app.vault.adapter.stat(b.path);
-      return (bStats as any).mtime - (aStats as any).mtime;
-    });
+    // Sort by effective date (filename date or modification time), most recent first
+    const filesWithDates = await Promise.all(
+      recentFiles.map(async (file) => {
+        const filenameDate = this.extractDateFromFilename(file.basename);
+        const stats = await this.app.vault.adapter.stat(file.path);
+        const effectiveTime = filenameDate ? filenameDate.getTime() : (stats?.mtime || 0);
+        return { file, effectiveTime };
+      })
+    );
     
-    return recentFiles;
+    filesWithDates.sort((a, b) => b.effectiveTime - a.effectiveTime);
+    
+    return filesWithDates.map(item => item.file);
   }
 
   /**
@@ -304,10 +353,40 @@ ${content}
   async getLinkedNotes(file: TFile): Promise<TFile[]> {
     let linkedFiles: TFile[] = [];
     
-    // First check if content contains dataview query and settings allow using dataview
-    if (this.settings.useDataviewIfAvailable) {
-      const fileContent = await this.app.vault.read(file);
+    // Read file content once
+    const fileContent = await this.app.vault.read(file);
+    
+    // Check if this is a collection note with checkboxes
+    const hasCheckboxLinks = /- \[[ x]\] \[\[.*?\]\]/.test(fileContent);
+    
+    if (hasCheckboxLinks) {
+      // Extract only checked links from checkbox format
+      const checkboxRegex = /- \[x\] \[\[(.*?)\]\]/gi;
+      let match;
+      while ((match = checkboxRegex.exec(fileContent)) !== null) {
+        let linkPath = match[1];
+        
+        // Handle aliased links: [[path|alias]] -> path
+        if (linkPath.includes("|")) {
+          linkPath = linkPath.split("|")[0];
+        }
+        
+        // Resolve the file
+        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
+        
+        if (linkedFile && linkedFile instanceof TFile) {
+          if (!linkedFiles.some(existingFile => existingFile.path === linkedFile.path)) {
+            linkedFiles.push(linkedFile);
+          }
+        }
+      }
       
+      // For collection notes, only use checked items
+      return linkedFiles;
+    }
+    
+    // Check if content contains dataview query and settings allow using dataview
+    if (this.settings.useDataviewIfAvailable) {
       if (this.containsDataviewQuery(fileContent)) {
         const queries = this.extractDataviewQueries(fileContent);
         
@@ -429,12 +508,43 @@ ${content}
   }
 
   /**
+   * Extract date from filename if it starts with YYYY-MM-DD format
+   * @param filename The filename to parse
+   * @returns Date object or null if filename doesn't start with a date
+   */
+  private extractDateFromFilename(filename: string): Date | null {
+    // Match YYYY-MM-DD at the start of the filename
+    const dateMatch = filename.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    
+    if (dateMatch) {
+      const year = parseInt(dateMatch[1]);
+      const month = parseInt(dateMatch[2]);
+      const day = parseInt(dateMatch[3]);
+      
+      // Validate the date components
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const date = new Date(year, month - 1, day);
+        // Check if the date is valid
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
    * Check if a note is journal-style (contains headers with configured date format)
    * @param content The content to check
    * @returns True if the note contains date headers
    */
   private isJournalStyleNote(content: string): boolean {
     const dateFormat = this.settings.recentActivityDefaults.dateHeaderFormat;
+    // Skip journal parsing if dateHeaderFormat is empty
+    if (!dateFormat || dateFormat.trim() === '') {
+      return false;
+    }
     const dateHeaderRegex = this.dateFormatToRegex(dateFormat);
     return dateHeaderRegex.test(content);
   }
@@ -446,6 +556,10 @@ ${content}
    */
   private parseDateFromHeader(header: string): Date | null {
     const dateFormat = this.settings.recentActivityDefaults.dateHeaderFormat;
+    // Skip journal parsing if dateHeaderFormat is empty
+    if (!dateFormat || dateFormat.trim() === '') {
+      return null;
+    }
     return this.extractDateFromHeader(header, dateFormat);
   }
 
@@ -585,13 +699,15 @@ ${content}
    * @param preparedContent Optional preprocessed combined content
    * @param preparedSourceNotes Optional preprocessed source notes
    * @param timeWindowDays Optional time window in days for filtering journal content
+   * @param customPrompt Optional custom prompt to use for processing
    * @returns Distilled content as a DistillResponse
    */
   async distillFromRootNote(
     rootFile: TFile, 
     preparedContent?: string, 
     preparedSourceNotes?: string[],
-    timeWindowDays?: number
+    timeWindowDays?: number,
+    customPrompt?: string
   ): Promise<DistillResponse> {
     let combinedContent: string;
     let sourceNotes: string[];
@@ -624,8 +740,8 @@ ${content}
     // Log the combined content before sending to AI
     await this.logDistillContext(combinedContent, rootFile.basename);
     
-    // Send to OpenAI for distillation
-    const distilledContent = await this.openAIService.distillContent(combinedContent);
+    // Send to OpenAI for distillation with optional custom prompt
+    const distilledContent = await this.openAIService.distillContent(combinedContent, customPrompt);
     
     // Add source notes to the response
     distilledContent.sourceNotes = [rootFile.basename, ...sourceNotes];

@@ -63,6 +63,18 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         })
       );
       
+    new Setting(containerEl)
+      .setName('Prompts folder')
+      .setDesc('Folder path where custom prompt templates are stored')
+      .addText(text => text
+        .setPlaceholder('OpenAugi/Prompts')
+        .setValue(this.plugin.settings.promptsFolder)
+        .onChange(async (value) => {
+          this.plugin.settings.promptsFolder = value;
+          await this.plugin.saveSettings();
+        })
+      );
+      
     // Check if Dataview plugin is installed
     // @ts-ignore - Dataview API is not typed
     const dataviewPluginInstalled = this.app.plugins.plugins["dataview"] !== undefined;
@@ -112,12 +124,12 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       
     new Setting(containerEl)
       .setName('Date header format')
-      .setDesc('Markdown format for date headers in journal notes. Use YYYY for year, MM for month, DD for day.')
+      .setDesc('Markdown format for date headers in journal notes. Use YYYY for year, MM for month, DD for day. Leave empty to disable journal parsing.')
       .addText(text => text
-        .setPlaceholder('### YYYY-MM-DD')
         .setValue(this.plugin.settings.recentActivityDefaults.dateHeaderFormat)
         .onChange(async (value) => {
-          if (value.includes('YYYY') && value.includes('MM') && value.includes('DD')) {
+          // Allow empty value to disable journal parsing
+          if (value === '' || (value.includes('YYYY') && value.includes('MM') && value.includes('DD'))) {
             this.plugin.settings.recentActivityDefaults.dateHeaderFormat = value;
             await this.plugin.saveSettings();
           }

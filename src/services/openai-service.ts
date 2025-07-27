@@ -208,14 +208,21 @@ export class OpenAIService {
   /**
    * Get the distillation prompt for the OpenAI API
    * @param content The aggregated content from linked notes
+   * @param customPrompt Optional custom prompt to replace the default instructions
    * @returns The formatted prompt
    */
-  private getDistillPrompt(content: string): string {
+  private getDistillPrompt(content: string, customPrompt?: string): string {
     // Extract any custom context from the content (which should include the root note)
     const customContext = this.extractCustomContext(content);
     
-    // Base prompt
-    let prompt = `
+    let prompt: string;
+    
+    if (customPrompt) {
+      // Use the custom prompt as the main instructions
+      prompt = customPrompt;
+    } else {
+      // Use the default prompt
+      prompt = `
     You are an expert knowledge curator helping users distill and organize information from their notes. Your task is to analyze multiple related notes and create a coherent set of atomic notes and a summary.
     
     # Instructions
@@ -242,8 +249,9 @@ export class OpenAIService {
     - Highlight connections between ideas
     - Use \`[[Backlinks]]\` to connect to relevant atomic notes
     `;
+    }
     
-    // Add custom context if available
+    // Add custom context if available (this is from the context: section in notes)
     if (customContext) {
       prompt += `\n\n${customContext}`;
     }
@@ -257,14 +265,15 @@ export class OpenAIService {
   /**
    * Call the OpenAI API to distill content from linked notes
    * @param content The aggregated content from linked notes
+   * @param customPrompt Optional custom prompt to replace the default instructions
    * @returns Distilled content data
    */
-  async distillContent(content: string): Promise<DistillResponse> {
+  async distillContent(content: string, customPrompt?: string): Promise<DistillResponse> {
     if (!this.apiKey) {
       throw new Error('OpenAI API key not set');
     }
 
-    const prompt = this.getDistillPrompt(content);
+    const prompt = this.getDistillPrompt(content, customPrompt);
     
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
