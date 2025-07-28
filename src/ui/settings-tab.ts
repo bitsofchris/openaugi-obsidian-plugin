@@ -38,42 +38,66 @@ export class OpenAugiSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Summaries folder')
       .setDesc('Folder path where summary files will be saved')
-      .addText(text => text
-        .setPlaceholder('OpenAugi/Summaries')
-        .setValue(this.plugin.settings.summaryFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.summaryFolder = value;
-          await this.plugin.saveSettings();
-          // Ensure directories exist after folder path changes
-          await this.plugin.fileService.ensureDirectoriesExist();
-        })
-      );
+      .addText(text => {
+        text
+          .setPlaceholder('OpenAugi/Summaries')
+          .setValue(this.plugin.settings.summaryFolder);
+        
+        // Save only when input loses focus
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue();
+          if (value !== this.plugin.settings.summaryFolder) {
+            this.plugin.settings.summaryFolder = value;
+            await this.plugin.saveSettings();
+            // Ensure directories exist after folder path changes
+            await this.plugin.fileService.ensureDirectoriesExist();
+          }
+        });
+        
+        return text;
+      });
       
     new Setting(containerEl)
       .setName('Notes folder')
       .setDesc('Folder path where atomic notes will be saved')
-      .addText(text => text
-        .setPlaceholder('OpenAugi/Notes')
-        .setValue(this.plugin.settings.notesFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.notesFolder = value;
-          await this.plugin.saveSettings();
-          // Ensure directories exist after folder path changes
-          await this.plugin.fileService.ensureDirectoriesExist();
-        })
-      );
+      .addText(text => {
+        text
+          .setPlaceholder('OpenAugi/Notes')
+          .setValue(this.plugin.settings.notesFolder);
+        
+        // Save only when input loses focus
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue();
+          if (value !== this.plugin.settings.notesFolder) {
+            this.plugin.settings.notesFolder = value;
+            await this.plugin.saveSettings();
+            // Ensure directories exist after folder path changes
+            await this.plugin.fileService.ensureDirectoriesExist();
+          }
+        });
+        
+        return text;
+      });
       
     new Setting(containerEl)
       .setName('Prompts folder')
       .setDesc('Folder path where custom prompt templates are stored')
-      .addText(text => text
-        .setPlaceholder('OpenAugi/Prompts')
-        .setValue(this.plugin.settings.promptsFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.promptsFolder = value;
-          await this.plugin.saveSettings();
-        })
-      );
+      .addText(text => {
+        text
+          .setPlaceholder('OpenAugi/Prompts')
+          .setValue(this.plugin.settings.promptsFolder);
+        
+        // Save only when input loses focus
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue();
+          if (value !== this.plugin.settings.promptsFolder) {
+            this.plugin.settings.promptsFolder = value;
+            await this.plugin.saveSettings();
+          }
+        });
+        
+        return text;
+      });
       
     // Check if Dataview plugin is installed
     // @ts-ignore - Dataview API is not typed
