@@ -1,8 +1,10 @@
 import { App, Modal, Setting, TFile } from 'obsidian';
+import { ProcessingType } from '../types/context';
 
 export interface PromptSelectionConfig {
   selectedPrompt?: TFile;
   useCustomPrompt: boolean;
+  processingType?: ProcessingType;  // 'distill' or 'publish'
 }
 
 export class PromptSelectionModal extends Modal {
@@ -10,28 +12,51 @@ export class PromptSelectionModal extends Modal {
   private onSubmit: (config: PromptSelectionConfig) => void;
   private promptsFolder: string;
   private availablePrompts: TFile[] = [];
+  private showProcessingType: boolean;
 
   constructor(
-    app: App, 
+    app: App,
     promptsFolder: string,
-    onSubmit: (config: PromptSelectionConfig) => void
+    onSubmit: (config: PromptSelectionConfig) => void,
+    showProcessingType: boolean = false,
+    defaultProcessingType: ProcessingType = 'distill'
   ) {
     super(app);
     this.promptsFolder = promptsFolder;
-    this.config = { useCustomPrompt: false };
+    this.config = {
+      useCustomPrompt: false,
+      processingType: defaultProcessingType
+    };
     this.onSubmit = onSubmit;
+    this.showProcessingType = showProcessingType;
   }
 
   async onOpen() {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: 'Select Processing Lens' });
-    
-    contentEl.createEl('p', { 
-      text: 'Choose a custom prompt to guide how the content is processed, or use the default prompt.',
-      cls: 'openaugi-prompt-description'
+    contentEl.createEl('h2', { text: 'Process Context' });
+
+    contentEl.createEl('p', {
+      text: 'Configure how to process the gathered context with AI.',
+      cls: 'setting-item-description'
     });
+
+    // Processing type selection (if enabled)
+    if (this.showProcessingType) {
+      new Setting(contentEl)
+        .setName('Output format')
+        .setDesc('How to process the context')
+        .addDropdown(dropdown => {
+          dropdown
+            .addOption('distill', 'Distill to atomic notes')
+            .addOption('publish', 'Publish as single post')
+            .setValue(this.config.processingType || 'distill')
+            .onChange((value: ProcessingType) => {
+              this.config.processingType = value;
+            });
+        });
+    }
 
     // Load available prompts
     await this.loadAvailablePrompts();

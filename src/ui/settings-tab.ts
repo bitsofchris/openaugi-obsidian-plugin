@@ -34,6 +34,32 @@ export class OpenAugiSettingTab extends PluginSettingTab {
           }
         })
       );
+
+    new Setting(containerEl)
+      .setName('OpenAI Model')
+      .setDesc('Select the OpenAI model to use for processing')
+      .addDropdown(dropdown => dropdown
+        .addOption('gpt-5', 'GPT-5')
+        .addOption('gpt-5-mini', 'GPT-5 Mini')
+        .addOption('gpt-5-nano', 'GPT-5 Nano')
+        .setValue(this.plugin.settings.defaultModel)
+        .onChange(async (value) => {
+          this.plugin.settings.defaultModel = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Custom Model Override (Optional)')
+      .setDesc('Specify any OpenAI model name to override the selection above. Leave empty to use the selected model.')
+      .addText(text => text
+        .setPlaceholder('e.g., gpt-4o-2024-11-20')
+        .setValue(this.plugin.settings.customModelOverride)
+        .onChange(async (value) => {
+          this.plugin.settings.customModelOverride = value;
+          await this.plugin.saveSettings();
+        })
+      );
     
     new Setting(containerEl)
       .setName('Summaries folder')
@@ -86,7 +112,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         text
           .setPlaceholder('OpenAugi/Prompts')
           .setValue(this.plugin.settings.promptsFolder);
-        
+
         // Save only when input loses focus
         text.inputEl.addEventListener('blur', async () => {
           const value = text.getValue();
@@ -95,7 +121,29 @@ export class OpenAugiSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }
         });
-        
+
+        return text;
+      });
+
+    new Setting(containerEl)
+      .setName('Published folder')
+      .setDesc('Folder path where published blog posts will be saved')
+      .addText(text => {
+        text
+          .setPlaceholder('OpenAugi/Published')
+          .setValue(this.plugin.settings.publishedFolder);
+
+        // Save only when input loses focus
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue();
+          if (value !== this.plugin.settings.publishedFolder) {
+            this.plugin.settings.publishedFolder = value;
+            await this.plugin.saveSettings();
+            // Ensure directories exist after folder path changes
+            await this.plugin.fileService.ensureDirectoriesExist();
+          }
+        });
+
         return text;
       });
       
@@ -175,6 +223,51 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         })
       );
       
+    // Context Gathering Settings Header
+    containerEl.createEl('h3', { text: 'Context Gathering Settings' });
+
+    new Setting(containerEl)
+      .setName('Default link depth')
+      .setDesc('Default depth for link traversal (1-3)')
+      .addSlider(slider => slider
+        .setLimits(1, 3, 1)
+        .setValue(this.plugin.settings.contextGatheringDefaults.linkDepth)
+        .setDynamicTooltip()
+        .onChange(async (value) => {
+          this.plugin.settings.contextGatheringDefaults.linkDepth = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Default max characters')
+      .setDesc('Default maximum characters to gather')
+      .addText(text => text
+        .setPlaceholder('100000')
+        .setValue(String(this.plugin.settings.contextGatheringDefaults.maxCharacters))
+        .onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num > 0) {
+            this.plugin.settings.contextGatheringDefaults.maxCharacters = num;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Filter recent sections by default')
+      .setDesc('For journal-style notes, only include recent sections by default')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.contextGatheringDefaults.filterRecentSectionsOnly)
+        .onChange(async (value) => {
+          this.plugin.settings.contextGatheringDefaults.filterRecentSectionsOnly = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    // Advanced Settings Header
+    containerEl.createEl('h3', { text: 'Advanced Settings' });
+
     new Setting(containerEl)
       .setName('Enable distill logging')
       .setDesc('Log the full input context sent to AI when distilling notes. Logs are saved to OpenAugi/Logs folder.')

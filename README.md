@@ -5,6 +5,8 @@ Unlock the power of voice capture and go faster.
 
 Open Augi ("auggie") is an open source augmented intelligence plugin for Obsidian. It's designed for people who like to think out loud (like me).
 
+**✨ NEW: Unified Context Gathering System** - Intelligently discover notes (up to 3 levels deep), review with checkboxes, and choose to distill into atomic notes OR publish as a polished blog post. One flexible system, multiple outputs. [Read the full guide →](CONTEXT_GATHERING.md)
+
 Just capture your voice note, drop hints to Augi, and let Open Augi's agentic workflow process your note into a self-organizing second brain for you.
 
 This is designed to run in a separate folder within your vault. Any agentic actions taken on existing notes, not created by Augi, will be sent to you for review.
@@ -24,7 +26,7 @@ Parent [repo](https://github.com/bitsofchris/openaugi).
 
 ## Main Commands
 
-OpenAugi offers two primary commands:
+OpenAugi offers commands for different workflows - from voice transcripts to unified context gathering:
 
 ### 1. Parse Transcript
 
@@ -50,7 +52,112 @@ Using "auggie" as a special token during your voice note can improve accuracy of
 - Say "auggie summarize this" to get a summary of recent thoughts
 - Say "auggie this is a journal entry" to format text as a journal entry
 
-### 2. Distill Linked Notes
+---
+
+## 🆕 Unified Context Gathering Commands
+
+**NEW: Flexible, powerful context gathering with link traversal, checkboxes, and dual output modes (distill OR publish).**
+
+These commands use OpenAugi's unified context gathering system - a three-stage pipeline that gives you full control:
+
+1. **Configure** - Choose source (linked notes or recent activity), depth, filters
+2. **Review** - See discovered notes in checkbox list, toggle individual notes on/off
+3. **Process** - Choose to distill into atomic notes OR publish as a single blog post
+
+[📖 Read the complete Context Gathering Guide](CONTEXT_GATHERING.md)
+
+### Process Notes
+
+**Best for:** Processing curated sets of linked notes, creating blog posts from research, topic-focused synthesis
+
+**How it works:**
+1. Open any note with links to content you want to process
+2. Run `OpenAugi: Process notes`
+3. Configure discovery:
+   - **Link depth**: 1-3 levels (breadth-first traversal)
+   - **Max characters**: Default 100k (prevents overflow)
+   - **Folder exclusions**: Skip Templates, Archive, etc.
+   - **Journal filtering**: Extract only recent sections from journal notes
+4. Review discovered notes in checkbox list
+5. See preview with stats (notes, characters, tokens)
+6. Choose output: **Distill to atomic notes** OR **Publish as single post**
+7. Optionally select custom prompt lens
+
+**Outputs:**
+- **Distill**: Atomic notes in `OpenAugi/Notes/`, summary in `OpenAugi/Summaries/`
+- **Publish**: Single blog post in `OpenAugi/Published/` with frontmatter
+
+**Example use case:**
+```markdown
+# Q4 2024 Learning.md
+
+Links to process:
+- [[Book: Building a Second Brain]]
+- [[Course: Knowledge Management]]
+- [[Project Insights]]
+
+Run "Process notes" → Depth 2 → Publish as blog post
+→ Get: "What I Learned About Knowledge Management - Published 2025-10-13.md"
+```
+
+### Process Recent Activity
+
+**Best for:** Weekly reviews, activity summaries, periodic reflection posts
+
+**How it works:**
+1. Run `OpenAugi: Process recent activity`
+2. Configure time window:
+   - **Last N days** (quick: 1, 7, 30 days)
+   - **Specific date range** (exact: 2025-01-01 to 2025-01-31)
+3. Same review → preview → process flow as above
+
+**Example use case:**
+```
+Weekly review every Sunday:
+1. Run "Process recent activity"
+2. Set to "Last 7 days"
+3. Exclude "Archive", "Templates"
+4. Enable "Recent sections only" for journal filtering
+5. Uncheck meeting notes, keep insights
+6. Publish as blog post
+→ Get: Weekly reflection ready for blog
+```
+
+### Save Context
+
+**Best for:** Gathering research without AI processing, creating reference documents, debugging context
+
+**How it works:**
+1. Same configuration and review flow
+2. But skips AI processing entirely
+3. Saves raw aggregated content to `OpenAugi/Context YYYY-MM-DD.md`
+
+**Example use case:**
+```
+Gather all project documentation:
+1. Create note with links to all specs, decisions, notes
+2. Run "Save context" → Depth 3
+3. Get single markdown file with everything aggregated
+→ Use for offline reading, sharing, manual synthesis
+```
+
+### Key Features
+
+✅ **Link depth traversal** - Go up to 3 levels deep (breadth-first search)
+✅ **Checkbox review** - Toggle individual notes before processing
+✅ **Character limits** - Prevents token overflow (default: 100k)
+✅ **Dual output modes** - Distill (atomic notes) OR Publish (blog post)
+✅ **Journal filtering** - Extract only recent sections from journal notes
+✅ **Raw context saving** - Skip AI, just aggregate content
+✅ **Custom prompts** - Use lenses for focused processing
+
+---
+
+## Legacy Commands
+
+These commands still work but are now superseded by the unified context gathering system above.
+
+### 2. Distill Linked Notes (Legacy)
 
 This command analyzes a set of linked notes and synthesizes them into a coherent set of atomic notes.
 
@@ -71,64 +178,6 @@ The plugin will:
 - Generate a summary that connects the key concepts
 - Extract any actionable tasks found across the notes
 
-### 3. Distill Recent Activity
-
-This command automatically discovers and distills notes that have been recently modified or have date prefixes in their filenames, perfect for daily/weekly reviews.
-
-**Usage:**
-1. Hit `CMD+P` (or `CTRL+P` on Windows/Linux) to open the command palette
-2. Run `OpenAugi: Distill Recent Activity`
-3. Configure your preferences in the modal:
-   - **Time Window Selection**:
-     - **Default Mode**: "Days to look back" - specify how many days of activity to include (default: 7)
-     - **Date Range Mode**: Toggle "Use specific date range" to select exact start and end dates
-   - **Filter journal sections**: For journal-style notes with date headers, only include recent sections
-   - **Root note**: Optionally specify a note to provide additional context
-   - **Exclude folders**: Skip folders like Templates or Archive
-4. Click "Select Notes" to preview and choose which notes to include:
-   - View all discovered notes with their modification dates
-   - Check/uncheck individual notes to customize your selection
-   - Use "Select All" toggle for bulk selection
-5. Optional: Click "Save as Collection" to create a persistent checkbox list for future use
-6. Click "Distill" to process
-7. Select a custom prompt "lens" or use the default prompt
-
-**The plugin will:**
-- Show discovered notes in an interactive checkbox list
-- Process only the notes you've selected
-- For journal-style notes with date headers (e.g., `### 2024-01-20`), extract only recent sections
-- Synthesize the activity into organized atomic notes using your selected lens
-- Create atomic notes in a timestamped session folder (e.g., `OpenAugi/Notes/Recent Activity 2024-01-20 14-30-52/`)
-- Generate a summary with a descriptive name based on content
-
-**Date Range Selection:**
-Toggle between two modes for selecting your time window:
-- **"Last N days"**: Quick selection for recent activity (1 day, 7 days, etc.)
-- **Specific date range**: Choose exact start and end dates using date pickers
-  - Perfect for reviewing specific periods like "last week" or "this month"
-  - Includes all notes modified or dated within the range
-
-**Note Selection Interface:**
-The new selection interface lets you:
-- Preview all notes that match your criteria before processing
-- See each note's folder location and modification time
-- Exclude specific notes by unchecking them
-- Save your selection as a collection for future reference
-
-**Save as Collection:**
-Create a persistent record of your note selection:
-- Saves to `OpenAugi/Collections/` folder
-- Preserves checked/unchecked states
-- Can be used later with "Distill Linked Notes" command
-- Perfect for creating curated sets of notes for repeated analysis
-
-**Date-Based Note Discovery:**
-Notes with filenames beginning with `YYYY-MM-DD` format are automatically included if their date falls within your specified time window, regardless of when they were last modified. This is perfect for:
-- Meeting notes dated by when they occurred
-- Daily logs or journal entries
-- Event-based documentation
-- Any notes you want to organize by their content date rather than modification time
-
 ## Custom Prompt Lenses
 
 **NEW**: OpenAugi now supports custom prompt templates that act as "lenses" to focus processing on specific aspects of your notes.
@@ -139,7 +188,7 @@ Custom prompts allow you to guide OpenAugi's AI processing with specific perspec
 
 ### Using Custom Prompts
 
-1. When you run "Distill Linked Notes" or "Distill Recent Activity", you'll see a prompt selection modal
+1. When you run "Distill Linked Notes", you'll see a prompt selection modal
 2. Choose from any prompt in your prompts folder (default: `OpenAugi/Prompts`)
 3. The selected prompt replaces the default processing instructions while keeping the structured output format
 4. Or select "Use default prompt" for general-purpose processing
@@ -247,7 +296,7 @@ The custom context allows you to narrow the focus of processing to extract speci
 ## Use Cases
 
 ### Daily/Weekly Reviews
-Use "Distill Recent Activity" to automatically summarize your work:
+Use "Process Recent Activity" to automatically summarize your work:
 - Set to 1 day for daily reviews
 - Set to 7 days for weekly reviews
 - Automatically captures all your recent thoughts and work
@@ -261,14 +310,14 @@ Use "Distill Linked Notes" with a project hub note:
 
 ### Research Synthesis
 Combine both commands for research workflows:
-- Use "Distill Recent Activity" to review recent research notes
+- Use "Process Recent Activity" to review recent research notes
 - Use "Distill Linked Notes" on topic-specific collections
 - Add custom context to focus on findings, methodologies, or insights
 
 ### Journal Processing
 Take advantage of journal-style note support:
 - Keep daily journal entries with date headers
-- Use "Distill Recent Activity" to extract recent insights
+- Use "Process Recent Activity" to extract recent insights
 - Only relevant date sections are processed, keeping context focused
 
 ## Requirements
@@ -285,10 +334,18 @@ OpenAugi provides several configuration options in Settings → OpenAugi:
 - **Summaries Folder**: Where summary files are saved (default: `OpenAugi/Summaries`)
 - **Notes Folder**: Where atomic notes are saved (default: `OpenAugi/Notes`)
 - **Prompts Folder**: Where custom prompt templates are stored (default: `OpenAugi/Prompts`)
+- **Published Folder**: Where published blog posts are saved (default: `OpenAugi/Published`)
 - **Use Dataview**: Enable processing of dataview queries in distillation
 
+### Context Gathering Settings
+Configure defaults for the unified context gathering system:
+
+- **Default Link Depth**: Initial depth for link traversal (1-3, default: 1)
+- **Default Max Characters**: Character limit before stopping discovery (default: 100,000)
+- **Filter Recent Sections by Default**: Automatically enable journal section filtering (default: On)
+
 ### Recent Activity Settings
-Configure defaults for the "Distill Recent Activity" command:
+Configure defaults for recent activity processing:
 
 - **Default Days to Look Back**: How many days of activity to include by default (default: 7)
 - **Filter Journal Sections**: When enabled, only includes recent sections from journal-style notes
@@ -322,7 +379,7 @@ Yesterday's reflections...
 Older content that may be filtered out...
 ```
 
-When using "Distill Recent Activity" with a 7-day window, only the recent sections would be processed.
+When using "Process Recent Activity" with a 7-day window, only the recent sections would be processed.
 
 ## Output Structure
 
