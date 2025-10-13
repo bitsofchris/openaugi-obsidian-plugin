@@ -15,9 +15,11 @@ function estimateTokens(text: string): number {
  */
 export class OpenAIService {
   private apiKey: string;
+  private model: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, model: string) {
     this.apiKey = apiKey;
+    this.model = model;
   }
 
   /**
@@ -130,7 +132,7 @@ export class OpenAIService {
           'Authorization': `Bearer ${this.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
+          model: this.model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.2,
           max_tokens: 32768,
@@ -283,7 +285,7 @@ export class OpenAIService {
           'Authorization': `Bearer ${this.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
+          model: this.model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.2,
           max_tokens: 32768,
@@ -450,7 +452,7 @@ Return a single markdown blog post, ready to publish.`;
           'Authorization': `Bearer ${this.apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
+          model: this.model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,  // Higher temperature for more creative output
           max_tokens: 32768

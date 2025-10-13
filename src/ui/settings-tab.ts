@@ -34,6 +34,32 @@ export class OpenAugiSettingTab extends PluginSettingTab {
           }
         })
       );
+
+    new Setting(containerEl)
+      .setName('OpenAI Model')
+      .setDesc('Select the OpenAI model to use for processing')
+      .addDropdown(dropdown => dropdown
+        .addOption('gpt-5', 'GPT-5')
+        .addOption('gpt-5-mini', 'GPT-5 Mini')
+        .addOption('gpt-5-nano', 'GPT-5 Nano')
+        .setValue(this.plugin.settings.defaultModel)
+        .onChange(async (value) => {
+          this.plugin.settings.defaultModel = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Custom Model Override (Optional)')
+      .setDesc('Specify any OpenAI model name to override the selection above. Leave empty to use the selected model.')
+      .addText(text => text
+        .setPlaceholder('e.g., gpt-4o-2024-11-20')
+        .setValue(this.plugin.settings.customModelOverride)
+        .onChange(async (value) => {
+          this.plugin.settings.customModelOverride = value;
+          await this.plugin.saveSettings();
+        })
+      );
     
     new Setting(containerEl)
       .setName('Summaries folder')

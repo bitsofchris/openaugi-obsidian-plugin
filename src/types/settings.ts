@@ -15,6 +15,8 @@ export interface ContextGatheringDefaults {
 
 export interface OpenAugiSettings {
   apiKey: string;
+  defaultModel: string;
+  customModelOverride: string;
   summaryFolder: string;
   notesFolder: string;
   promptsFolder: string;
@@ -27,6 +29,8 @@ export interface OpenAugiSettings {
 
 export const DEFAULT_SETTINGS: OpenAugiSettings = {
   apiKey: '',
+  defaultModel: 'gpt-5',
+  customModelOverride: '',
   summaryFolder: 'OpenAugi/Summaries',
   notesFolder: 'OpenAugi/Notes',
   promptsFolder: 'OpenAugi/Prompts',

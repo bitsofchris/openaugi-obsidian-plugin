@@ -127,10 +127,17 @@ export default class OpenAugiPlugin extends Plugin {
   }
 
   /**
+   * Get the configured model (custom override or default)
+   */
+  private getConfiguredModel(): string {
+    return this.settings.customModelOverride.trim() || this.settings.defaultModel;
+  }
+
+  /**
    * Initialize services with current settings
    */
   private initializeServices(): void {
-    this.openAIService = new OpenAIService(this.settings.apiKey);
+    this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
     this.fileService = new FileService(
       this.app,
       this.settings.summaryFolder,
@@ -186,8 +193,8 @@ export default class OpenAugiPlugin extends Plugin {
       // Display character and token count
       new Notice(`Processing transcript: ${file.basename}\nCharacters: ${content.length}\nEst. Tokens: ${estimateTokens(content)}`);
 
-      // Update openAIService with latest API key
-      this.openAIService = new OpenAIService(this.settings.apiKey);
+      // Update openAIService with latest API key and model
+      this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
       
       // Parse transcript
       const parsedData = await this.openAIService.parseTranscript(content);
@@ -247,8 +254,8 @@ export default class OpenAugiPlugin extends Plugin {
         return;
       }
 
-      // Update services with latest API key
-      this.openAIService = new OpenAIService(this.settings.apiKey);
+      // Update services with latest API key and model
+      this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
       this.distillService = new DistillService(
         this.app, 
         this.openAIService,
@@ -367,8 +374,8 @@ export default class OpenAugiPlugin extends Plugin {
       // Show loading indicator
       this.loadingIndicator?.show('Discovering recent activity...');
 
-      // Update services with latest API key
-      this.openAIService = new OpenAIService(this.settings.apiKey);
+      // Update services with latest API key and model
+      this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
       this.distillService = new DistillService(
         this.app, 
         this.openAIService,
@@ -753,8 +760,8 @@ ${allFiles.map(f => `- [[${f.basename}]]`).join('\n')}`;
     try {
       this.loadingIndicator?.show('Distilling content...');
 
-      // Update services with latest API key
-      this.openAIService = new OpenAIService(this.settings.apiKey);
+      // Update services with latest API key and model
+      this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
       this.distillService = new DistillService(
         this.app,
         this.openAIService,
@@ -800,8 +807,8 @@ ${allFiles.map(f => `- [[${f.basename}]]`).join('\n')}`;
     try {
       this.loadingIndicator?.show('Publishing content...');
 
-      // Update services with latest API key
-      this.openAIService = new OpenAIService(this.settings.apiKey);
+      // Update services with latest API key and model
+      this.openAIService = new OpenAIService(this.settings.apiKey, this.getConfiguredModel());
 
       // Call publish API
       const publishedContent = await this.openAIService.publishContent(
