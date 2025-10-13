@@ -469,7 +469,7 @@ ${content}
       .replace(/MM/g, '\\d{2}')                 // Replace MM with month pattern
       .replace(/DD/g, '\\d{2}');                // Replace DD with day pattern
     
-    return new RegExp(`^${pattern}\\s*$`, 'm');
+    return new RegExp(`^${pattern}`, 'm');
   }
 
   /**
