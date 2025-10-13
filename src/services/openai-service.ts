@@ -134,8 +134,7 @@ export class OpenAIService {
         body: JSON.stringify({
           model: this.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          max_tokens: 32768,
+          max_completion_tokens: 32768,
           response_format: {
             type: "json_schema",
             json_schema: {
@@ -287,8 +286,7 @@ export class OpenAIService {
         body: JSON.stringify({
           model: this.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-          max_tokens: 32768,
+          max_completion_tokens: 32768,
           response_format: {
             type: "json_schema",
             json_schema: {
@@ -454,8 +452,7 @@ Return a single markdown blog post, ready to publish.`;
         body: JSON.stringify({
           model: this.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,  // Higher temperature for more creative output
-          max_tokens: 32768
+          max_completion_tokens: 32768
         })
       });
 
