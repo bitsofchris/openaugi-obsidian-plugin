@@ -1,4 +1,4 @@
-import { TranscriptResponse, DistillResponse } from '../types/transcript';
+import { TranscriptResponse, DistillResponse, PublishResponse } from '../types/transcript';
 
 /**
  * A simple tokeinzer to estimate the number of tokens
@@ -357,6 +357,124 @@ export class OpenAIService {
       return parsedData;
     } catch (error) {
       console.error('Error calling OpenAI API:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the default publishing prompt
+   * @returns The default prompt for publishing content
+   */
+  private getDefaultPublishPrompt(): string {
+    return `You are helping transform raw notes into a polished, publishable blog post.
+
+Take these notes and create ONE cohesive blog post that:
+
+PRESERVE:
+- The author's unique voice and personality
+- Direct, conversational tone
+- Creative language and specific phrases
+- The core insights and ideas
+
+ADD:
+- Why this matters to the reader
+- Context where needed (but don't over-explain)
+- Natural transitions between ideas
+- A clear narrative arc or structure
+
+FORMAT:
+- Short paragraphs (2-4 sentences)
+- Use headers/subheaders to organize sections
+- Bold key phrases sparingly for emphasis
+- Conversational but polished
+
+TONE:
+- Write like you're explaining to a curious friend
+- Be direct and honest
+- Don't be overly formal or academic
+- Let personality shine through
+
+OUTPUT:
+Return a single markdown blog post, ready to publish.`;
+  }
+
+  /**
+   * Get the publishing prompt for the OpenAI API
+   * @param content The aggregated content from notes
+   * @param customPrompt Optional custom prompt to replace the default
+   * @returns The formatted prompt
+   */
+  private getPublishPrompt(content: string, customPrompt?: string): string {
+    // Extract any custom context from the content
+    const customContext = this.extractCustomContext(content);
+
+    let prompt: string;
+
+    if (customPrompt) {
+      // Use the custom prompt as the main instructions
+      prompt = customPrompt;
+    } else {
+      // Use the default publishing prompt
+      prompt = this.getDefaultPublishPrompt();
+    }
+
+    // Add custom context if available (this is from the context: section in notes)
+    if (customContext) {
+      prompt += `\n\n${customContext}`;
+    }
+
+    // Add content to publish
+    prompt += `\n\n# Content to Transform:\n${content}`;
+
+    return prompt;
+  }
+
+  /**
+   * Call the OpenAI API to publish content as a single blog post
+   * @param content The aggregated content from notes
+   * @param customPrompt Optional custom prompt to replace the default
+   * @returns Published content as plain markdown
+   */
+  async publishContent(content: string, customPrompt?: string): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key not set');
+    }
+
+    const prompt = this.getPublishPrompt(content, customPrompt);
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-2025-04-14',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,  // Higher temperature for more creative output
+          max_tokens: 32768
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`OpenAI API error: ${response.status} ${errorData.error?.message || response.statusText}`);
+      }
+
+      const responseData = await response.json();
+
+      // Check for API refusal
+      if (responseData.choices[0].message.refusal) {
+        throw new Error(`API refusal: ${responseData.choices[0].message.refusal}`);
+      }
+
+      // Get the plain text content
+      const publishedContent = responseData.choices[0].message.content;
+
+      return publishedContent;
+    } catch (error) {
+      console.error('Error calling OpenAI API for publishing:', error);
       throw error;
     }
   }

@@ -3,11 +3,16 @@ import { OpenAugiSettings, DEFAULT_SETTINGS } from './types/settings';
 import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
 import { DistillService } from './services/distill-service';
+import { ContextGatheringService } from './services/context-gathering-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
 import { sanitizeFilename, createFileWithCollisionHandling } from './utils/filename-utils';
 import { RecentActivityModal, RecentActivityConfig } from './ui/recent-activity-modal';
 import { PromptSelectionModal, PromptSelectionConfig } from './ui/prompt-selection-modal';
+import { ContextGatheringModal } from './ui/context-gathering-modal';
+import { ContextSelectionModal } from './ui/context-selection-modal';
+import { ContextPreviewModal } from './ui/context-preview-modal';
+import { CommandOptions, ContextGatheringConfig, GatheredContext, DiscoveredNote } from './types/context';
 
 /**
  * A simple tokeinzer to estimate the number of tokens
@@ -24,6 +29,7 @@ export default class OpenAugiPlugin extends Plugin {
   openAIService: OpenAIService;
   fileService: FileService;
   distillService: DistillService;
+  contextGatheringService: ContextGatheringService;
   loadingIndicator: LoadingIndicator;
 
   async onload() {
@@ -78,6 +84,44 @@ export default class OpenAugiPlugin extends Plugin {
       }
     });
 
+    // Add new unified context gathering commands
+    this.addCommand({
+      id: 'openaugi-process-notes',
+      name: 'Process notes',
+      callback: async () => {
+        await this.gatherAndProcessContext({
+          commandType: 'distill',
+          defaultSourceMode: 'linked-notes',
+          defaultDepth: 1
+        });
+      }
+    });
+
+    this.addCommand({
+      id: 'openaugi-process-recent',
+      name: 'Process recent activity',
+      callback: async () => {
+        await this.gatherAndProcessContext({
+          commandType: 'distill',
+          defaultSourceMode: 'recent-activity',
+          defaultDepth: 1
+        });
+      }
+    });
+
+    this.addCommand({
+      id: 'openaugi-save-context',
+      name: 'Save context',
+      callback: async () => {
+        await this.gatherAndProcessContext({
+          commandType: 'save-raw',
+          defaultSourceMode: 'linked-notes',
+          defaultDepth: 1,
+          skipPreview: false
+        });
+      }
+    });
+
     // Add settings tab
     this.addSettingTab(new OpenAugiSettingTab(this.app, this));
   }
@@ -88,13 +132,19 @@ export default class OpenAugiPlugin extends Plugin {
   private initializeServices(): void {
     this.openAIService = new OpenAIService(this.settings.apiKey);
     this.fileService = new FileService(
-      this.app, 
-      this.settings.summaryFolder, 
-      this.settings.notesFolder
+      this.app,
+      this.settings.summaryFolder,
+      this.settings.notesFolder,
+      this.settings.publishedFolder
     );
     this.distillService = new DistillService(
       this.app,
       this.openAIService,
+      this.settings
+    );
+    this.contextGatheringService = new ContextGatheringService(
+      this.app,
+      this.distillService,
       this.settings
     );
   }
@@ -449,6 +499,333 @@ ${allFiles.map(f => `- [[${f.basename}]]`).join('\n')}`;
       
       console.error('Failed to distill recent activity:', error);
       new Notice('Failed to distill recent activity. Check console for details.');
+    }
+  }
+
+  /**
+   * Main orchestration method for unified context gathering and processing
+   * @param options Options specifying the command type and defaults
+   */
+  private async gatherAndProcessContext(options: CommandOptions): Promise<void> {
+    // Step 1: Show context gathering configuration modal
+    const configModal = new ContextGatheringModal(
+      this.app,
+      this.settings,
+      this.contextGatheringService,
+      async (config: ContextGatheringConfig) => {
+        await this.executeContextGathering(config, options);
+      },
+      options.defaultSourceMode,
+      options.defaultDepth
+    );
+    configModal.open();
+  }
+
+  /**
+   * Execute context gathering with the given configuration
+   * @param config Context gathering configuration
+   * @param options Command options
+   */
+  private async executeContextGathering(
+    config: ContextGatheringConfig,
+    options: CommandOptions
+  ): Promise<void> {
+    try {
+      this.loadingIndicator?.show('Discovering notes...');
+
+      // Gather context
+      const gatheredContext = await this.contextGatheringService.gatherContext(config);
+
+      this.loadingIndicator?.hide();
+
+      // Check if any notes were discovered
+      if (gatheredContext.notes.length === 0) {
+        new Notice('No notes discovered with the given configuration');
+        return;
+      }
+
+      // Step 2: Show checkbox selection modal
+      const selectionModal = new ContextSelectionModal(
+        this.app,
+        gatheredContext.notes,
+        async (selectedNotes: DiscoveredNote[]) => {
+          await this.showContextPreview(gatheredContext, selectedNotes, options);
+        }
+      );
+      selectionModal.open();
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      console.error('Failed to gather context:', error);
+      new Notice('Failed to gather context: ' + error.message);
+    }
+  }
+
+  /**
+   * Show context preview with save/process options
+   * @param context Original gathered context
+   * @param selectedNotes User-selected notes
+   * @param options Command options
+   */
+  private async showContextPreview(
+    context: GatheredContext,
+    selectedNotes: DiscoveredNote[],
+    options: CommandOptions
+  ): Promise<void> {
+    try {
+      // Check if any notes selected
+      if (selectedNotes.length === 0) {
+        new Notice('No notes selected');
+        return;
+      }
+
+      this.loadingIndicator?.show('Aggregating content...');
+
+      // Re-aggregate with only selected notes
+      const files = selectedNotes.map(n => n.file);
+      const aggregated = await this.distillService.aggregateContent(
+        files,
+        context.config.filterRecentSectionsOnly ? context.config.journalSectionDays : undefined
+      );
+
+      // Update context with selected notes
+      const finalContext: GatheredContext = {
+        ...context,
+        notes: selectedNotes,
+        aggregatedContent: aggregated.content,
+        totalCharacters: aggregated.content.length,
+        totalNotes: selectedNotes.length
+      };
+
+      this.loadingIndicator?.hide();
+
+      // Determine button label based on command type
+      const processButtonLabel = options.commandType === 'save-raw'
+        ? 'Save Context'
+        : 'Process with AI';
+
+      // Step 3: Show preview modal
+      const previewModal = new ContextPreviewModal(
+        this.app,
+        finalContext,
+        async () => await this.saveRawContext(finalContext),
+        async () => {
+          if (options.commandType === 'save-raw') {
+            await this.saveRawContext(finalContext);
+          } else {
+            await this.processContextWithAI(finalContext, options);
+          }
+        },
+        processButtonLabel
+      );
+      previewModal.open();
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      console.error('Failed to preview context:', error);
+      new Notice('Failed to preview context: ' + error.message);
+    }
+  }
+
+  /**
+   * Save raw context to a note without AI processing
+   * @param context The gathered context to save
+   */
+  private async saveRawContext(context: GatheredContext): Promise<void> {
+    try {
+      this.loadingIndicator?.show('Saving context...');
+
+      // Ensure OpenAugi folder exists
+      if (!await this.app.vault.adapter.exists('OpenAugi')) {
+        await this.app.vault.createFolder('OpenAugi');
+      }
+
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const timeString = new Date().toISOString().split('T')[1].substring(0, 8).replace(/:/g, '-');
+      const filename = `Context ${timestamp} ${timeString}`;
+      const path = `OpenAugi/${filename}.md`;
+
+      // Build content
+      let content = `# Gathered Context\n\n`;
+      content += `**Source**: ${context.config.sourceMode}\n`;
+      content += `**Notes**: ${context.totalNotes}\n`;
+      content += `**Characters**: ${context.totalCharacters.toLocaleString()}\n`;
+      content += `**Timestamp**: ${context.timestamp}\n`;
+
+      if (context.config.sourceMode === 'linked-notes') {
+        content += `**Link Depth**: ${context.config.linkDepth}\n`;
+      }
+
+      content += `\n## Included Notes\n`;
+      content += context.notes.map(n => `- [[${n.file.basename}]]`).join('\n');
+      content += `\n\n---\n\n`;
+      content += context.aggregatedContent;
+
+      // Save file
+      await createFileWithCollisionHandling(this.app.vault, path, content);
+
+      this.loadingIndicator?.hide();
+
+      new Notice(`Context saved to: ${filename}`);
+
+      // Open the file
+      await this.openFileInNewTab(path);
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      console.error('Failed to save raw context:', error);
+      new Notice('Failed to save context: ' + error.message);
+    }
+  }
+
+  /**
+   * Process context with AI (distill or publish)
+   * @param context The gathered context
+   * @param options Command options
+   */
+  private async processContextWithAI(
+    context: GatheredContext,
+    options: CommandOptions
+  ): Promise<void> {
+    // Show prompt selection modal with processing type option
+    const promptModal = new PromptSelectionModal(
+      this.app,
+      this.settings.promptsFolder,
+      async (promptConfig: PromptSelectionConfig) => {
+        await this.executeProcessing(context, promptConfig, options);
+      },
+      true,  // Show processing type selector
+      'distill'  // Default to distill
+    );
+    promptModal.open();
+  }
+
+  /**
+   * Execute AI processing with the selected prompt and processing type
+   * @param context The gathered context
+   * @param promptConfig Prompt selection configuration
+   * @param options Command options
+   */
+  private async executeProcessing(
+    context: GatheredContext,
+    promptConfig: PromptSelectionConfig,
+    options: CommandOptions
+  ): Promise<void> {
+    try {
+      // Check API key
+      if (!this.settings.apiKey) {
+        new Notice('Please set your OpenAI API key in the settings');
+        return;
+      }
+
+      // Read custom prompt if selected
+      let customPrompt: string | undefined;
+      if (promptConfig.useCustomPrompt && promptConfig.selectedPrompt) {
+        try {
+          customPrompt = await this.app.vault.read(promptConfig.selectedPrompt);
+        } catch (error) {
+          console.error('Failed to read custom prompt:', error);
+          new Notice('Failed to read custom prompt, using default');
+        }
+      }
+
+      const processingType = promptConfig.processingType || 'distill';
+
+      if (processingType === 'publish') {
+        await this.executePublish(context, customPrompt, promptConfig.selectedPrompt?.basename || 'default');
+      } else {
+        await this.executeDistill(context, customPrompt);
+      }
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      console.error('Failed to process context:', error);
+      new Notice('Failed to process context: ' + error.message);
+    }
+  }
+
+  /**
+   * Execute distill processing
+   * @param context The gathered context
+   * @param customPrompt Optional custom prompt
+   */
+  private async executeDistill(
+    context: GatheredContext,
+    customPrompt?: string
+  ): Promise<void> {
+    try {
+      this.loadingIndicator?.show('Distilling content...');
+
+      // Update services with latest API key
+      this.openAIService = new OpenAIService(this.settings.apiKey);
+      this.distillService = new DistillService(
+        this.app,
+        this.openAIService,
+        this.settings
+      );
+
+      // Call distill API
+      const distilledData = await this.openAIService.distillContent(
+        context.aggregatedContent,
+        customPrompt
+      );
+
+      // Add source notes
+      distilledData.sourceNotes = context.notes.map(n => n.file.basename);
+
+      // Write files using first note as synthetic root
+      const syntheticRoot = context.notes[0].file;
+      const summaryPath = await this.fileService.writeDistilledFiles(syntheticRoot, distilledData);
+
+      this.loadingIndicator?.hide();
+
+      new Notice(`Successfully distilled! Created ${distilledData.notes.length} atomic notes`);
+
+      // Open the summary file
+      await this.openFileInNewTab(summaryPath);
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      throw error;
+    }
+  }
+
+  /**
+   * Execute publish processing
+   * @param context The gathered context
+   * @param customPrompt Optional custom prompt
+   * @param promptName Name of the prompt used
+   */
+  private async executePublish(
+    context: GatheredContext,
+    customPrompt: string | undefined,
+    promptName: string
+  ): Promise<void> {
+    try {
+      this.loadingIndicator?.show('Publishing content...');
+
+      // Update services with latest API key
+      this.openAIService = new OpenAIService(this.settings.apiKey);
+
+      // Call publish API
+      const publishedContent = await this.openAIService.publishContent(
+        context.aggregatedContent,
+        customPrompt
+      );
+
+      // Write published post
+      const sourceNotes = context.notes.map(n => n.file.basename);
+      const publishedPath = await this.fileService.writePublishedPost(
+        publishedContent,
+        sourceNotes,
+        promptName
+      );
+
+      this.loadingIndicator?.hide();
+
+      new Notice('Successfully published blog post!');
+
+      // Open the published file
+      await this.openFileInNewTab(publishedPath);
+    } catch (error) {
+      this.loadingIndicator?.hide();
+      throw error;
     }
   }
 } 

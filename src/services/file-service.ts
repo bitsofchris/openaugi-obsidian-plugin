@@ -9,12 +9,14 @@ export class FileService {
   private vault: Vault;
   private summaryFolder: string;
   private notesFolder: string;
+  private publishedFolder: string;
   private backlinkMapper: BacklinkMapper;
 
-  constructor(app: App, summaryFolder: string, notesFolder: string) {
+  constructor(app: App, summaryFolder: string, notesFolder: string, publishedFolder: string) {
     this.vault = app.vault;
     this.summaryFolder = summaryFolder;
     this.notesFolder = notesFolder;
+    this.publishedFolder = publishedFolder;
     this.backlinkMapper = new BacklinkMapper();
   }
 
@@ -55,9 +57,10 @@ export class FileService {
   async ensureDirectoriesExist(): Promise<void> {
     const dirs = [
       this.summaryFolder,
-      this.notesFolder
+      this.notesFolder,
+      this.publishedFolder
     ];
-    
+
     for (const dir of dirs) {
       const exists = await this.vault.adapter.exists(dir);
       if (!exists) {
@@ -217,5 +220,75 @@ export class FileService {
     }
     
     return summaryPath;
+  }
+
+  /**
+   * Write published post to file
+   * @param content The published blog post content
+   * @param sourceNotes Array of source note names
+   * @param promptName Name of the prompt used (or "default")
+   * @returns Path to the created file
+   */
+  async writePublishedPost(
+    content: string,
+    sourceNotes: string[],
+    promptName: string = 'default'
+  ): Promise<string> {
+    // Ensure published directory exists
+    await this.ensureDirectoriesExist();
+
+    // Generate filename with timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Try to extract a title from the first heading in the content
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    let titlePart = 'Published Post';
+    if (titleMatch && titleMatch[1]) {
+      titlePart = sanitizeFilename(titleMatch[1]);
+      // Truncate if too long
+      if (titlePart.length > 50) {
+        titlePart = titlePart.substring(0, 50) + '...';
+      }
+    } else if (sourceNotes.length > 0) {
+      // Fallback to first source note name
+      titlePart = sanitizeFilename(sourceNotes[0]);
+      if (titlePart.length > 30) {
+        titlePart = titlePart.substring(0, 30) + '...';
+      }
+    }
+
+    const filename = `${titlePart} - Published ${timestamp}`;
+
+    // Create frontmatter
+    const frontmatter = `---
+type: published-post
+published_date: ${now.toISOString()}
+prompt_used: ${promptName}
+status: draft
+source_notes: ${sourceNotes.map(n => `[[${n}]]`).join(', ')}
+---
+
+`;
+
+    // Create footer
+    const footer = `
+
+---
+
+*Generated from notes using OpenAugi. Source notes: ${sourceNotes.map(n => `[[${n}]]`).join(', ')}*
+`;
+
+    // Combine everything
+    const fullContent = frontmatter + content + footer;
+
+    // Write file
+    const filePath = await createFileWithCollisionHandling(
+      this.vault,
+      `${this.publishedFolder}/${filename}.md`,
+      fullContent
+    );
+
+    return filePath;
   }
 } 

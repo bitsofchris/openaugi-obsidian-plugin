@@ -5,6 +5,8 @@ Unlock the power of voice capture and go faster.
 
 Open Augi ("auggie") is an open source augmented intelligence plugin for Obsidian. It's designed for people who like to think out loud (like me).
 
+**✨ NEW: Unified Context Gathering System** - Intelligently discover notes (up to 3 levels deep), review with checkboxes, and choose to distill into atomic notes OR publish as a polished blog post. One flexible system, multiple outputs. [Read the full guide →](CONTEXT_GATHERING.md)
+
 Just capture your voice note, drop hints to Augi, and let Open Augi's agentic workflow process your note into a self-organizing second brain for you.
 
 This is designed to run in a separate folder within your vault. Any agentic actions taken on existing notes, not created by Augi, will be sent to you for review.
@@ -24,7 +26,7 @@ Parent [repo](https://github.com/bitsofchris/openaugi).
 
 ## Main Commands
 
-OpenAugi offers two primary commands:
+OpenAugi offers commands for different workflows - from voice transcripts to unified context gathering:
 
 ### 1. Parse Transcript
 
@@ -50,7 +52,112 @@ Using "auggie" as a special token during your voice note can improve accuracy of
 - Say "auggie summarize this" to get a summary of recent thoughts
 - Say "auggie this is a journal entry" to format text as a journal entry
 
-### 2. Distill Linked Notes
+---
+
+## 🆕 Unified Context Gathering Commands
+
+**NEW: Flexible, powerful context gathering with link traversal, checkboxes, and dual output modes (distill OR publish).**
+
+These commands use OpenAugi's unified context gathering system - a three-stage pipeline that gives you full control:
+
+1. **Configure** - Choose source (linked notes or recent activity), depth, filters
+2. **Review** - See discovered notes in checkbox list, toggle individual notes on/off
+3. **Process** - Choose to distill into atomic notes OR publish as a single blog post
+
+[📖 Read the complete Context Gathering Guide](CONTEXT_GATHERING.md)
+
+### Process Notes
+
+**Best for:** Processing curated sets of linked notes, creating blog posts from research, topic-focused synthesis
+
+**How it works:**
+1. Open any note with links to content you want to process
+2. Run `OpenAugi: Process notes`
+3. Configure discovery:
+   - **Link depth**: 1-3 levels (breadth-first traversal)
+   - **Max characters**: Default 100k (prevents overflow)
+   - **Folder exclusions**: Skip Templates, Archive, etc.
+   - **Journal filtering**: Extract only recent sections from journal notes
+4. Review discovered notes in checkbox list
+5. See preview with stats (notes, characters, tokens)
+6. Choose output: **Distill to atomic notes** OR **Publish as single post**
+7. Optionally select custom prompt lens
+
+**Outputs:**
+- **Distill**: Atomic notes in `OpenAugi/Notes/`, summary in `OpenAugi/Summaries/`
+- **Publish**: Single blog post in `OpenAugi/Published/` with frontmatter
+
+**Example use case:**
+```markdown
+# Q4 2024 Learning.md
+
+Links to process:
+- [[Book: Building a Second Brain]]
+- [[Course: Knowledge Management]]
+- [[Project Insights]]
+
+Run "Process notes" → Depth 2 → Publish as blog post
+→ Get: "What I Learned About Knowledge Management - Published 2025-10-13.md"
+```
+
+### Process Recent Activity
+
+**Best for:** Weekly reviews, activity summaries, periodic reflection posts
+
+**How it works:**
+1. Run `OpenAugi: Process recent activity`
+2. Configure time window:
+   - **Last N days** (quick: 1, 7, 30 days)
+   - **Specific date range** (exact: 2025-01-01 to 2025-01-31)
+3. Same review → preview → process flow as above
+
+**Example use case:**
+```
+Weekly review every Sunday:
+1. Run "Process recent activity"
+2. Set to "Last 7 days"
+3. Exclude "Archive", "Templates"
+4. Enable "Recent sections only" for journal filtering
+5. Uncheck meeting notes, keep insights
+6. Publish as blog post
+→ Get: Weekly reflection ready for blog
+```
+
+### Save Context
+
+**Best for:** Gathering research without AI processing, creating reference documents, debugging context
+
+**How it works:**
+1. Same configuration and review flow
+2. But skips AI processing entirely
+3. Saves raw aggregated content to `OpenAugi/Context YYYY-MM-DD.md`
+
+**Example use case:**
+```
+Gather all project documentation:
+1. Create note with links to all specs, decisions, notes
+2. Run "Save context" → Depth 3
+3. Get single markdown file with everything aggregated
+→ Use for offline reading, sharing, manual synthesis
+```
+
+### Key Features
+
+✅ **Link depth traversal** - Go up to 3 levels deep (breadth-first search)
+✅ **Checkbox review** - Toggle individual notes before processing
+✅ **Character limits** - Prevents token overflow (default: 100k)
+✅ **Dual output modes** - Distill (atomic notes) OR Publish (blog post)
+✅ **Journal filtering** - Extract only recent sections from journal notes
+✅ **Raw context saving** - Skip AI, just aggregate content
+✅ **Custom prompts** - Use lenses for focused processing
+
+---
+
+## Legacy Commands
+
+These commands still work but are now superseded by the unified context gathering system above.
+
+### 2. Distill Linked Notes (Legacy)
 
 This command analyzes a set of linked notes and synthesizes them into a coherent set of atomic notes.
 
@@ -285,7 +392,15 @@ OpenAugi provides several configuration options in Settings → OpenAugi:
 - **Summaries Folder**: Where summary files are saved (default: `OpenAugi/Summaries`)
 - **Notes Folder**: Where atomic notes are saved (default: `OpenAugi/Notes`)
 - **Prompts Folder**: Where custom prompt templates are stored (default: `OpenAugi/Prompts`)
+- **Published Folder**: Where published blog posts are saved (default: `OpenAugi/Published`)
 - **Use Dataview**: Enable processing of dataview queries in distillation
+
+### Context Gathering Settings
+Configure defaults for the unified context gathering system:
+
+- **Default Link Depth**: Initial depth for link traversal (1-3, default: 1)
+- **Default Max Characters**: Character limit before stopping discovery (default: 100,000)
+- **Filter Recent Sections by Default**: Automatically enable journal section filtering (default: On)
 
 ### Recent Activity Settings
 Configure defaults for the "Distill Recent Activity" command:

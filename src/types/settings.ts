@@ -7,14 +7,22 @@ export interface RecentActivitySettings {
   dateHeaderFormat: string;
 }
 
+export interface ContextGatheringDefaults {
+  linkDepth: number;
+  maxCharacters: number;
+  filterRecentSectionsOnly: boolean;
+}
+
 export interface OpenAugiSettings {
   apiKey: string;
   summaryFolder: string;
   notesFolder: string;
   promptsFolder: string;
+  publishedFolder: string;
   useDataviewIfAvailable: boolean;
   enableDistillLogging: boolean;
   recentActivityDefaults: RecentActivitySettings;
+  contextGatheringDefaults: ContextGatheringDefaults;
 }
 
 export const DEFAULT_SETTINGS: OpenAugiSettings = {
@@ -22,6 +30,7 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
   summaryFolder: 'OpenAugi/Summaries',
   notesFolder: 'OpenAugi/Notes',
   promptsFolder: 'OpenAugi/Prompts',
+  publishedFolder: 'OpenAugi/Published',
   useDataviewIfAvailable: true,
   enableDistillLogging: false,
   recentActivityDefaults: {
@@ -29,5 +38,10 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
     excludeFolders: ['Templates', 'Archive', 'OpenAugi'],
     filterJournalSections: true,
     dateHeaderFormat: '### YYYY-MM-DD'
+  },
+  contextGatheringDefaults: {
+    linkDepth: 1,
+    maxCharacters: 100000,
+    filterRecentSectionsOnly: true
   }
 }; 
