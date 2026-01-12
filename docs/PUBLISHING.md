@@ -88,6 +88,8 @@ Monitor progress at: https://github.com/bitsofchris/openaugi-obsidian-plugin/act
 [Any breaking changes or things users need to know when upgrading]
 ```
 
+Write this out to a markdown file.
+
 ### Step 6: Publish the Release
 
 1. Go to https://github.com/bitsofchris/openaugi-obsidian-plugin/releases
