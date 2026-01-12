@@ -1,16 +1,13 @@
 # OpenAugi Obsidian Plugin - Technical Overview
 
 ## Project Purpose
-OpenAugi is an Obsidian plugin that transforms voice notes and linked notes into organized, atomic notes using AI (GPT-4). It helps users process unstructured thoughts into a structured "second brain" by breaking down content into self-contained ideas.
+OpenAugi is an Obsidian plugin that transforms voice notes and linked notes into organized, atomic notes using AI. It helps users process unstructured thoughts into a structured "second brain" by breaking down content into self-contained ideas.
+
+The goal is to help humans process information faster.
+
+Read the docs/CODEBASE_MAP.md to understand the project at a high level. Be sure to update this map as we make any siginficant changes.
 
 ## Architecture Overview
-
-### Core Technologies
-- **Language**: TypeScript
-- **Build Tool**: esbuild
-- **Target Platform**: Obsidian (Electron-based)
-- **AI Service**: OpenAI GPT-4.1-2025-04-14
-- **Node Version**: 18+
 
 ### Project Structure
 ```
@@ -128,6 +125,16 @@ Currently no automated tests. Manual testing through Obsidian's developer consol
 2. Build production bundle: `npm run build`
 3. Create release with `main.js`, `manifest.json`, and `styles.css`
 
+##### Obsidian tagging
+1. Create a tag that matches the version in the `manifest.json` file.
+    
+    ```bash
+    git push # dont forget to push the code
+    git tag -a 1.0.1 -m "1.0.1"
+    git push origin 1.0.1
+    ```
+*** Be sure to update `manifest.json` version number as part of PR ***
+
 ## Important Considerations
 
 - Always handle API errors gracefully
@@ -136,9 +143,8 @@ Currently no automated tests. Manual testing through Obsidian's developer consol
 - Maintain backwards compatibility with existing notes
 - Test with various note structures and edge cases
 
-## Future Enhancements
-- Support for additional AI models
-- Batch processing optimization
-- Enhanced Dataview query support
-- Customizable output templates
-- Integration with other Obsidian plugins
+# Testing
+
+My local testing vault is in: /Users/chris/zk-for-testing
+
+Add any notes to /Users/chris/Documents/DEV-TESTING/Test to capture edge cases when relevant.
