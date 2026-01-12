@@ -1,9 +1,9 @@
 {
 	"id": "openaugi",
 	"name": "OpenAugi",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"minAppVersion": "1.8.9",
-	"description": "Parse your voice notes into atomic notes, tasks, and summaries. OpenAugi is the voice to self-organizing second brain. While taking a voice note say 'auggie' to help the agent. Augmented Intelligence is AI for thinkers.",
+	"description": "Process information faster with augmented intelligence (AI for thinkers). Parse your voice notes into atomic notes, tasks, and summaries. Grab context from dataview queries and linked notes. De-duplicate and merge atomic ideas into a clean, organized vault.",
 	"author": "Chris Lettieri",
 	"authorUrl": "https://bitsofchris.com",
 	"isDesktopOnly": false

@@ -174,6 +174,15 @@ ${content}
   }
 
   /**
+   * Strip dataview query blocks from content
+   * @param content The content to clean
+   * @returns Content with dataview blocks removed
+   */
+  private stripDataviewQueries(content: string): string {
+    return content.replace(/```dataview[\s\S]*?```\n?/g, '');
+  }
+
+  /**
    * Extract dataview queries from content
    * @param content The content to extract queries from
    * @returns Array of extracted dataview queries
@@ -670,7 +679,10 @@ ${content}
       }
       
       let content = await this.app.vault.read(file);
-      
+
+      // Strip dataview queries from output content
+      content = this.stripDataviewQueries(content);
+
       // Apply time filtering if specified
       if (timeWindowDays !== undefined && timeWindowDays > 0) {
         content = this.extractContentByDateRange(content, timeWindowDays);
