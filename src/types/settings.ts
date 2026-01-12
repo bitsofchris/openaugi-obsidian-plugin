@@ -17,6 +17,7 @@ export interface OpenAugiSettings {
   apiKey: string;
   defaultModel: string;
   customModelOverride: string;
+  cachedModels: string[];
   summaryFolder: string;
   notesFolder: string;
   promptsFolder: string;
@@ -29,8 +30,9 @@ export interface OpenAugiSettings {
 
 export const DEFAULT_SETTINGS: OpenAugiSettings = {
   apiKey: '',
-  defaultModel: 'gpt-5',
+  defaultModel: 'gpt-4o',
   customModelOverride: '',
+  cachedModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
   summaryFolder: 'OpenAugi/Summaries',
   notesFolder: 'OpenAugi/Notes',
   promptsFolder: 'OpenAugi/Prompts',

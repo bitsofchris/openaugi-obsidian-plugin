@@ -23,6 +23,40 @@ export class OpenAIService {
   }
 
   /**
+   * Fetch available models from OpenAI API
+   * @param apiKey The OpenAI API key
+   * @returns Array of chat-compatible model IDs, sorted alphabetically
+   */
+  static async fetchAvailableModels(apiKey: string): Promise<string[]> {
+    if (!apiKey) {
+      throw new Error('API key is required to fetch models');
+    }
+
+    const response = await fetch('https://api.openai.com/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Failed to fetch models: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    // Filter for chat-compatible models
+    const chatModelPrefixes = ['gpt-', 'o1', 'o3', 'chatgpt-'];
+    const chatModels = data.data
+      .map((model: { id: string }) => model.id)
+      .filter((id: string) => chatModelPrefixes.some(prefix => id.startsWith(prefix)))
+      .sort((a: string, b: string) => a.localeCompare(b));
+
+    return chatModels;
+  }
+
+  /**
    * Extract custom context instructions from content if they exist
    * @param content The content to extract the context from
    * @returns The extracted context or null if none exists

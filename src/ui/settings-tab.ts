@@ -1,5 +1,6 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, DropdownComponent } from 'obsidian';
 import type OpenAugiPlugin from '../types/plugin';
+import { OpenAIService } from '../services/openai-service';
 
 export class OpenAugiSettingTab extends PluginSettingTab {
   plugin: OpenAugiPlugin;
@@ -35,17 +36,77 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl)
+    let modelDropdown: DropdownComponent;
+
+    const modelSetting = new Setting(containerEl)
       .setName('OpenAI Model')
       .setDesc('Select the OpenAI model to use for processing')
-      .addDropdown(dropdown => dropdown
-        .addOption('gpt-5', 'GPT-5')
-        .addOption('gpt-5-mini', 'GPT-5 Mini')
-        .addOption('gpt-5-nano', 'GPT-5 Nano')
-        .setValue(this.plugin.settings.defaultModel)
-        .onChange(async (value) => {
+      .addDropdown(dropdown => {
+        modelDropdown = dropdown;
+        // Populate dropdown from cached models
+        const models = this.plugin.settings.cachedModels;
+        models.forEach(model => {
+          dropdown.addOption(model, model);
+        });
+        // Ensure current selection is valid, fallback to first available
+        const currentModel = this.plugin.settings.defaultModel;
+        if (models.includes(currentModel)) {
+          dropdown.setValue(currentModel);
+        } else if (models.length > 0) {
+          dropdown.setValue(models[0]);
+          this.plugin.settings.defaultModel = models[0];
+          this.plugin.saveSettings();
+        }
+        dropdown.onChange(async (value) => {
           this.plugin.settings.defaultModel = value;
           await this.plugin.saveSettings();
+        });
+      })
+      .addButton(button => button
+        .setButtonText('Refresh Models')
+        .setDisabled(!this.plugin.settings.apiKey)
+        .onClick(async () => {
+          if (!this.plugin.settings.apiKey) {
+            new Notice('Please set your API key first');
+            return;
+          }
+
+          button.setButtonText('Loading...');
+          button.setDisabled(true);
+
+          try {
+            const models = await OpenAIService.fetchAvailableModels(this.plugin.settings.apiKey);
+
+            if (models.length === 0) {
+              new Notice('No chat models found');
+              return;
+            }
+
+            // Update cached models
+            this.plugin.settings.cachedModels = models;
+
+            // Ensure current selection is still valid
+            if (!models.includes(this.plugin.settings.defaultModel)) {
+              this.plugin.settings.defaultModel = models[0];
+            }
+
+            await this.plugin.saveSettings();
+
+            // Rebuild dropdown options
+            modelDropdown.selectEl.empty();
+            models.forEach(model => {
+              modelDropdown.addOption(model, model);
+            });
+            modelDropdown.setValue(this.plugin.settings.defaultModel);
+
+            new Notice(`Loaded ${models.length} models`);
+          } catch (error) {
+            console.error('Failed to fetch models:', error);
+            new Notice(`Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          } finally {
+            button.setButtonText('Refresh Models');
+            button.setDisabled(!this.plugin.settings.apiKey);
+          }
         })
       );
 
