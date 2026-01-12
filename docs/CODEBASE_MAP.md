@@ -355,12 +355,9 @@ npm run build    # Production build
 npm run typecheck # TypeScript checking
 ```
 
-### Publishing Checklist
+### Publishing
 
-1. Update version in `manifest.json` and `package.json`
-2. Run `npm run build`
-3. Create git tag: `git tag -a X.Y.Z -m "X.Y.Z"`
-4. Push tag: `git push origin X.Y.Z`
+See [PUBLISHING.md](PUBLISHING.md) for the complete release process.
 
 ---
 

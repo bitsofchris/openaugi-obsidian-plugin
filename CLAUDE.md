@@ -121,18 +121,15 @@ Currently no automated tests. Manual testing through Obsidian's developer consol
 - Enable verbose logging in development
 
 ### Publishing
-1. Update version in `manifest.json` and `package.json`
-2. Build production bundle: `npm run build`
-3. Create release with `main.js`, `manifest.json`, and `styles.css`
+See [docs/PUBLISHING.md](docs/PUBLISHING.md) for the complete release process.
 
-##### Obsidian tagging
-1. Create a tag that matches the version in the `manifest.json` file.
-    
-    ```bash
-    git push # dont forget to push the code
-    git tag -a 1.0.1 -m "1.0.1"
-    git push origin 1.0.1
-    ```
+**Quick summary:**
+1. Update version in `manifest.json` and `package.json`
+2. Commit and push to master
+3. Tag with matching version: `git tag -a X.Y.Z -m "X.Y.Z" && git push origin X.Y.Z`
+4. Generate release notes (Claude: compare commits since last tag, focus on user-facing changes)
+5. Edit draft release on GitHub and publish
+
 *** Be sure to update `manifest.json` version number as part of PR ***
 
 ## Important Considerations
