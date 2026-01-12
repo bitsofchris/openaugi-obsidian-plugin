@@ -25,7 +25,7 @@ export class OpenAIService {
   /**
    * Fetch available models from OpenAI API
    * @param apiKey The OpenAI API key
-   * @returns Array of chat-compatible model IDs, sorted alphabetically
+   * @returns Array of chat-compatible model IDs, sorted with flagship models first
    */
   static async fetchAvailableModels(apiKey: string): Promise<string[]> {
     if (!apiKey) {
@@ -46,12 +46,62 @@ export class OpenAIService {
 
     const data = await response.json();
 
-    // Filter for chat-compatible models
-    const chatModelPrefixes = ['gpt-', 'o1', 'o3', 'chatgpt-'];
+    // Patterns to exclude (legacy, specialized, non-chat models)
+    const excludePatterns = [
+      /^ft:/,                    // Fine-tuned models
+      /^gpt-3/,                  // All GPT-3.x models (legacy)
+      /^gpt-4(?!\.)/,            // GPT-4 without dot (gpt-4, gpt-4-turbo, gpt-4o, etc.) - all legacy
+      /^o1/,                     // o1 series (legacy reasoning)
+      /^o3/,                     // o3 series (legacy reasoning)
+      /realtime/i,               // Realtime models (specialized)
+      /audio/i,                  // Audio-specific models
+      /transcription/i,          // Transcription models
+      /tts/i,                    // Text-to-speech models
+      /whisper/i,                // Whisper models
+      /dall-e/i,                 // Image generation
+      /embedding/i,              // Embedding models
+      /moderation/i,             // Moderation models
+      /davinci|curie|babbage|ada/i, // Legacy completion models
+      /search/i,                 // Search models
+      /-\d{4}-\d{2}-\d{2}/,      // Dated snapshots (YYYY-MM-DD format)
+    ];
+
+    // Include models that start with gpt- (for gpt-5, gpt-5.1, gpt-6, etc.) or o4+
     const chatModels = data.data
       .map((model: { id: string }) => model.id)
-      .filter((id: string) => chatModelPrefixes.some(prefix => id.startsWith(prefix)))
-      .sort((a: string, b: string) => a.localeCompare(b));
+      .filter((id: string) => {
+        // Must start with gpt- or o (for reasoning models like o4, o5, etc.)
+        if (!id.startsWith('gpt-') && !id.startsWith('o') && !id.startsWith('chatgpt-')) {
+          return false;
+        }
+
+        // Must not match any exclude pattern
+        const isExcluded = excludePatterns.some(pattern => pattern.test(id));
+        return !isExcluded;
+      });
+
+    // Sort with flagship models first, then alphabetically
+    // GPT-5.2 is current flagship (Dec 2025), with instant/thinking/pro variants
+    const flagshipOrder = [
+      'gpt-5.2', 'gpt-5.2-instant', 'gpt-5.2-thinking', 'gpt-5.2-pro', 'gpt-5.2-codex',
+      'gpt-5.1', 'gpt-5.1-instant', 'gpt-5.1-thinking', 'gpt-5.1-pro',
+      'gpt-5', 'gpt-5-instant', 'gpt-5-thinking', 'gpt-5-pro',
+      'o4', 'o4-mini', 'o4-pro', 'o5', 'o5-mini', 'o5-pro'
+    ];
+
+    chatModels.sort((a: string, b: string) => {
+      const aIndex = flagshipOrder.indexOf(a);
+      const bIndex = flagshipOrder.indexOf(b);
+
+      // Both are flagship models - sort by flagship order
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      // Only a is flagship - a comes first
+      if (aIndex !== -1) return -1;
+      // Only b is flagship - b comes first
+      if (bIndex !== -1) return 1;
+      // Neither is flagship - sort alphabetically
+      return a.localeCompare(b);
+    });
 
     return chatModels;
   }
