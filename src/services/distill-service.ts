@@ -183,6 +183,18 @@ ${content}
   }
 
   /**
+   * Strip tags from content (e.g., #tag, #nested/tag)
+   * @param content The content to clean
+   * @returns Content with tags removed
+   */
+  private stripTags(content: string): string {
+    // Match tags: # followed by word characters, may include forward slashes for nested tags
+    // Must be preceded by whitespace or start of line, and followed by whitespace, punctuation, or end of line
+    // Avoid matching markdown headers (## Header) by requiring non-# after the tag start
+    return content.replace(/(?:^|(?<=\s))#(?!#)[a-zA-Z0-9_][a-zA-Z0-9_/]*(?=\s|$|[.,;:!?)\]])/gm, '');
+  }
+
+  /**
    * Extract dataview queries from content
    * @param content The content to extract queries from
    * @returns Array of extracted dataview queries
