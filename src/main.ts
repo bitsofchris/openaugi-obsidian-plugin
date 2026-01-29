@@ -316,7 +316,24 @@ export default class OpenAugiPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const savedData = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, savedData);
+
+    // Deep merge nested settings to pick up new defaults
+    if (savedData?.contextGatheringDefaults) {
+      this.settings.contextGatheringDefaults = Object.assign(
+        {},
+        DEFAULT_SETTINGS.contextGatheringDefaults,
+        savedData.contextGatheringDefaults
+      );
+    }
+    if (savedData?.recentActivityDefaults) {
+      this.settings.recentActivityDefaults = Object.assign(
+        {},
+        DEFAULT_SETTINGS.recentActivityDefaults,
+        savedData.recentActivityDefaults
+      );
+    }
   }
 
   async saveSettings() {
@@ -404,10 +421,9 @@ export default class OpenAugiPlugin extends Plugin {
 
       this.loadingIndicator?.show('Aggregating content...');
 
-      // Re-aggregate with only selected notes
-      const files = selectedNotes.map(n => n.file);
-      const aggregated = await this.distillService.aggregateContent(
-        files,
+      // Re-aggregate with only selected notes (preserving backlink info)
+      const aggregated = await this.contextGatheringService.aggregateContent(
+        selectedNotes,
         context.config.filterRecentSectionsOnly ? context.config.journalSectionDays : undefined
       );
 

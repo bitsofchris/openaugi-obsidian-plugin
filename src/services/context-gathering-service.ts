@@ -34,11 +34,7 @@ export class ContextGatheringService {
       if (!config.rootNote) {
         throw new Error('Root note required for linked-notes mode');
       }
-      discoveredNotes = await this.discoverLinkedNotes(
-        config.rootNote,
-        config.linkDepth,
-        config.maxCharacters
-      );
+      discoveredNotes = await this.discoverLinkedNotes(config);
     } else {
       if (!config.timeWindow) {
         throw new Error('Time window required for recent-activity mode');
@@ -72,18 +68,22 @@ export class ContextGatheringService {
 
   /**
    * Discover notes by traversing links up to specified depth using BFS
-   * @param rootNote The starting note
-   * @param maxDepth Maximum depth to traverse (1-3)
-   * @param maxCharacters Stop when this many characters have been gathered
+   * Traverses both forward links and backlinks at each level
+   * @param config The context gathering configuration
    * @returns Array of discovered notes with metadata
    */
   private async discoverLinkedNotes(
-    rootNote: TFile,
-    maxDepth: number,
-    maxCharacters: number
+    config: ContextGatheringConfig
   ): Promise<DiscoveredNote[]> {
+    const rootNote = config.rootNote!;
+    const maxDepth = config.linkDepth;
+    const maxCharacters = config.maxCharacters;
+    const includeBacklinks = config.includeBacklinks ?? false;
+    const backlinkContextLines = config.backlinkContextLines ?? 2;
+
     const discovered = new Map<string, DiscoveredNote>();
-    const queue: Array<{ file: TFile; depth: number; via: string }> = [];
+    const queued = new Set<string>();  // Track queued files to prevent duplicates
+    const queue: Array<{ file: TFile; depth: number; via: string; isBacklink: boolean }> = [];
 
     // Start with root note
     const rootContent = await this.app.vault.read(rootNote);
@@ -92,29 +92,66 @@ export class ContextGatheringService {
       depth: 0,
       discoveredVia: 'root',
       estimatedChars: rootContent.length,
-      included: true
+      included: true,
+      isBacklink: false
     });
 
-    // Get direct links from root
+    // Get direct forward links from root
     const rootLinks = await this.distillService.getLinkedNotes(rootNote);
     for (const link of rootLinks) {
-      queue.push({ file: link, depth: 1, via: rootNote.basename });
+      queue.push({ file: link, depth: 1, via: rootNote.basename, isBacklink: false });
+      queued.add(link.path);
+    }
+
+    // Get backlinks to root if enabled
+    if (includeBacklinks) {
+      const rootBacklinks = this.distillService.getBacklinksForFile(rootNote);
+      for (const backlink of rootBacklinks) {
+        // Forward links take priority - only add if not already queued
+        if (!queued.has(backlink.path)) {
+          queue.push({ file: backlink, depth: 1, via: rootNote.basename, isBacklink: true });
+          queued.add(backlink.path);
+        }
+      }
     }
 
     // BFS traversal
     let totalChars = rootContent.length;
 
     while (queue.length > 0) {
-      const { file, depth, via } = queue.shift()!;
+      const { file, depth, via, isBacklink } = queue.shift()!;
 
       // Skip if already discovered
       if (discovered.has(file.path)) {
         continue;
       }
 
-      // Read content to check size
-      const content = await this.app.vault.read(file);
-      const chars = content.length;
+      let chars: number;
+      let snippetContent: string | undefined;
+
+      if (isBacklink) {
+        // For backlinks, get snippets instead of full content
+        // Find the target file (the note this backlink points TO) from discovered notes
+        const targetEntry = Array.from(discovered.entries()).find(
+          ([_, note]) => note.file.basename === via
+        );
+        const targetFile = targetEntry ? targetEntry[1].file : rootNote;
+
+        const snippets = await this.distillService.getBacklinkSnippets(
+          targetFile,
+          file,
+          backlinkContextLines
+        );
+
+        // Deduplicate snippets (multiple links in same section would produce identical snippets)
+        const uniqueSnippets = [...new Set(snippets.map(s => s.snippet))];
+        snippetContent = uniqueSnippets.join('\n\n---\n\n');
+        chars = snippetContent.length;
+      } else {
+        // For forward links, read full content
+        const content = await this.app.vault.read(file);
+        chars = content.length;
+      }
 
       // Check if adding this note would exceed character limit
       if (totalChars + chars > maxCharacters) {
@@ -122,9 +159,11 @@ export class ContextGatheringService {
         discovered.set(file.path, {
           file,
           depth,
-          discoveredVia: `linked from [[${via}]]`,
+          discoveredVia: isBacklink ? `backlink from [[${via}]]` : `linked from [[${via}]]`,
           estimatedChars: chars,
-          included: false  // Excluded due to size limit
+          included: false,  // Excluded due to size limit
+          isBacklink,
+          backlinkSnippet: isBacklink ? snippetContent : undefined
         });
         continue;
       }
@@ -133,21 +172,39 @@ export class ContextGatheringService {
       discovered.set(file.path, {
         file,
         depth,
-        discoveredVia: `linked from [[${via}]]`,
+        discoveredVia: isBacklink ? `backlink from [[${via}]]` : `linked from [[${via}]]`,
         estimatedChars: chars,
-        included: true
+        included: true,
+        isBacklink,
+        backlinkSnippet: isBacklink ? snippetContent : undefined
       });
+
+      console.log(`[OpenAugi] Discovered: ${file.basename} | isBacklink: ${isBacklink} | via: ${via} | depth: ${depth}`);
 
       totalChars += chars;
 
       // If we haven't reached max depth, get links from this note
       if (depth < maxDepth) {
         try {
+          // Get forward links
           const linkedNotes = await this.distillService.getLinkedNotes(file);
           for (const linkedNote of linkedNotes) {
-            // Don't queue if already discovered
-            if (!discovered.has(linkedNote.path)) {
-              queue.push({ file: linkedNote, depth: depth + 1, via: file.basename });
+            // Don't queue if already queued or discovered
+            if (!queued.has(linkedNote.path) && !discovered.has(linkedNote.path)) {
+              queue.push({ file: linkedNote, depth: depth + 1, via: file.basename, isBacklink: false });
+              queued.add(linkedNote.path);
+            }
+          }
+
+          // Get backlinks if enabled
+          if (includeBacklinks) {
+            const backlinks = this.distillService.getBacklinksForFile(file);
+            for (const backlink of backlinks) {
+              // Don't queue if already queued or discovered
+              if (!queued.has(backlink.path) && !discovered.has(backlink.path)) {
+                queue.push({ file: backlink, depth: depth + 1, via: file.basename, isBacklink: true });
+                queued.add(backlink.path);
+              }
             }
           }
         } catch (error) {
@@ -190,7 +247,8 @@ export class ContextGatheringService {
         depth: 0,  // No depth concept for recent activity
         discoveredVia: 'recent activity',
         estimatedChars: content.length,
-        included: true
+        included: true,
+        isBacklink: false
       });
     }
 
@@ -223,17 +281,45 @@ export class ContextGatheringService {
 
   /**
    * Aggregate content from notes
+   * For forward links: uses full content (with optional journal filtering)
+   * For backlinks: uses only the snippet
    * @param notes Notes to aggregate
    * @param filterJournalDays Optional days back for journal section filtering
    * @returns Aggregated content and source note names
    */
-  private async aggregateContent(
+  async aggregateContent(
     notes: DiscoveredNote[],
     filterJournalDays?: number
   ): Promise<{ content: string; sourceNotes: string[] }> {
-    // Reuse existing aggregateContent from DistillService
-    const files = notes.map(n => n.file);
-    return await this.distillService.aggregateContent(files, filterJournalDays);
+    // Separate forward links and backlinks
+    const forwardLinks = notes.filter(n => !n.isBacklink);
+    const backlinks = notes.filter(n => n.isBacklink);
+
+    // Aggregate forward links using existing method
+    const forwardFiles = forwardLinks.map(n => n.file);
+    const forwardResult = await this.distillService.aggregateContent(forwardFiles, filterJournalDays);
+
+    // Build backlinks section
+    let backlinkContent = '';
+    const backlinkSourceNotes: string[] = [];
+
+    for (const note of backlinks) {
+      backlinkContent += `\n\n# Backlink: ${note.file.basename}\n`;
+      backlinkContent += `*${note.discoveredVia}*\n\n`;
+      if (note.backlinkSnippet) {
+        backlinkContent += note.backlinkSnippet;
+      } else {
+        // Fallback: read full content if snippet is missing
+        const fullContent = await this.app.vault.read(note.file);
+        backlinkContent += fullContent;
+      }
+      backlinkSourceNotes.push(note.file.basename);
+    }
+
+    return {
+      content: forwardResult.content + backlinkContent,
+      sourceNotes: [...forwardResult.sourceNotes, ...backlinkSourceNotes]
+    };
   }
 
   /**

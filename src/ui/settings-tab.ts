@@ -326,6 +326,30 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         })
       );
 
+    new Setting(containerEl)
+      .setName('Include backlinks by default')
+      .setDesc('Also discover notes that link to discovered notes')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.contextGatheringDefaults.includeBacklinks)
+        .onChange(async (value) => {
+          this.plugin.settings.contextGatheringDefaults.includeBacklinks = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Backlink context lines')
+      .setDesc('Lines to extract around each backlink (0 = header section)')
+      .addSlider(slider => slider
+        .setLimits(0, 5, 1)
+        .setValue(this.plugin.settings.contextGatheringDefaults.backlinkContextLines)
+        .setDynamicTooltip()
+        .onChange(async (value) => {
+          this.plugin.settings.contextGatheringDefaults.backlinkContextLines = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
     // Advanced Settings Header
     containerEl.createEl('h3', { text: 'Advanced Settings' });
 

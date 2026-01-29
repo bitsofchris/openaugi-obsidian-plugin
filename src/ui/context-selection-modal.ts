@@ -187,15 +187,33 @@ export class ContextSelectionModal extends Modal {
         contentDiv.style.flexDirection = 'column';
         contentDiv.style.gap = '2px';
 
-        const titleEl = contentDiv.createEl('span');
+        const titleRow = contentDiv.createDiv();
+        titleRow.style.display = 'flex';
+        titleRow.style.alignItems = 'center';
+        titleRow.style.gap = '8px';
+
+        const titleEl = titleRow.createEl('span');
         titleEl.setText(note.file.basename);
         titleEl.style.fontWeight = '500';
+
+        // Backlink indicator badge
+        if (note.isBacklink) {
+          const backlinkBadge = titleRow.createEl('span');
+          backlinkBadge.setText('← backlink');
+          backlinkBadge.style.fontSize = '0.75em';
+          backlinkBadge.style.padding = '2px 6px';
+          backlinkBadge.style.borderRadius = '10px';
+          backlinkBadge.style.backgroundColor = 'var(--interactive-accent)';
+          backlinkBadge.style.color = 'var(--text-on-accent)';
+          backlinkBadge.style.fontWeight = 'normal';
+        }
 
         const metaEl = contentDiv.createEl('span');
         metaEl.style.fontSize = '0.85em';
         metaEl.style.color = 'var(--text-muted)';
         const sizeKb = (note.estimatedChars / 1000).toFixed(1);
-        metaEl.setText(`${sizeKb}k chars · ${note.discoveredVia}`);
+        const contentType = note.isBacklink ? 'snippet' : 'full note';
+        metaEl.setText(`${sizeKb}k chars (${contentType}) · ${note.discoveredVia}`);
       });
     });
 

@@ -29,6 +29,10 @@ export interface ContextGatheringConfig {
 
   // For recent activity: how many days back to filter journal sections
   journalSectionDays?: number;
+
+  // Backlink discovery settings
+  includeBacklinks?: boolean;       // Whether to also discover backlinks at each level
+  backlinkContextLines?: number;    // 0 = header section, N = lines before/after link
 }
 
 /**
@@ -37,9 +41,14 @@ export interface ContextGatheringConfig {
 export interface DiscoveredNote {
   file: TFile;
   depth: number;  // 0 = root, 1 = direct link, 2 = second level, etc.
-  discoveredVia: string;  // "root" | "linked from [[Note]]" | "recent activity"
+  discoveredVia: string;  // "root" | "linked from [[Note]]" | "backlink from [[Note]]" | "recent activity"
   estimatedChars: number;
   included: boolean;  // User can toggle in checkbox modal
+
+  // Backlink-specific fields
+  isBacklink: boolean;              // true if discovered via backlink
+  backlinkSnippet?: string;         // The extracted header section/block (only for backlinks)
+  backlinkLine?: number;            // Line number where link appears
 }
 
 /**

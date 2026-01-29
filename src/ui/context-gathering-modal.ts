@@ -33,7 +33,9 @@ export class ContextGatheringModal extends Modal {
       excludeFolders: settings.recentActivityDefaults.excludeFolders,
       filterRecentSectionsOnly: settings.contextGatheringDefaults.filterRecentSectionsOnly,
       dateHeaderFormat: settings.recentActivityDefaults.dateHeaderFormat,
-      journalSectionDays: settings.recentActivityDefaults.daysBack
+      journalSectionDays: settings.recentActivityDefaults.daysBack,
+      includeBacklinks: settings.contextGatheringDefaults.includeBacklinks,
+      backlinkContextLines: settings.contextGatheringDefaults.backlinkContextLines
     };
   }
 
@@ -192,6 +194,69 @@ export class ContextGatheringModal extends Modal {
               await this.updateEstimate();
             }
           });
+      });
+
+    // Backlink settings container
+    const backlinkContainer = this.modeSpecificContainer.createDiv({ cls: 'backlink-settings' });
+
+    // Include backlinks toggle
+    new Setting(backlinkContainer)
+      .setName('Include backlinks')
+      .setDesc('Also discover notes that link to discovered notes')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.config.includeBacklinks ?? false)
+          .onChange(async value => {
+            this.config.includeBacklinks = value;
+            this.renderBacklinkContextSetting(backlinkContainer);
+            await this.updateEstimate();
+          });
+      });
+
+    // Render context lines setting if backlinks enabled
+    this.renderBacklinkContextSetting(backlinkContainer);
+  }
+
+  private renderBacklinkContextSetting(container: HTMLElement) {
+    // Remove existing setting if present
+    const existing = container.querySelector('.backlink-context-setting');
+    if (existing) {
+      existing.remove();
+    }
+
+    if (!this.config.includeBacklinks) {
+      return;
+    }
+
+    const contextLines = this.config.backlinkContextLines ?? 2;
+    const contextDesc = contextLines === 0
+      ? 'Header section'
+      : `${contextLines} line${contextLines === 1 ? '' : 's'} before/after`;
+
+    new Setting(container)
+      .setName('Backlink context')
+      .setDesc(`Extract: ${contextDesc}`)
+      .setClass('backlink-context-setting')
+      .addSlider(slider => {
+        slider
+          .setLimits(0, 5, 1)
+          .setValue(contextLines)
+          .setDynamicTooltip()
+          .onChange(value => {
+            this.config.backlinkContextLines = value;
+            // Update description
+            const desc = value === 0
+              ? 'Header section'
+              : `${value} line${value === 1 ? '' : 's'} before/after`;
+            const settingEl = container.querySelector('.backlink-context-setting .setting-item-description');
+            if (settingEl) {
+              settingEl.textContent = `Extract: ${desc}`;
+            }
+          });
+      })
+      .addExtraButton(button => {
+        button.setIcon('info');
+        button.setTooltip('0 = header section (text under current markdown header)\n1-5 = fixed number of lines before and after the link');
       });
   }
 

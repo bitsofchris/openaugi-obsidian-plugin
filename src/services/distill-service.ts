@@ -478,6 +478,109 @@ ${content}
   }
 
   /**
+   * Get all files that link TO the given target file (backlinks)
+   * Uses the metadata cache's resolvedLinks for efficient lookup
+   * @param targetFile The file to find backlinks for
+   * @returns Array of files that link to the target
+   */
+  getBacklinksForFile(targetFile: TFile): TFile[] {
+    const backlinks: TFile[] = [];
+    const resolvedLinks = this.app.metadataCache.resolvedLinks;
+
+    // resolvedLinks is Record<sourcePath, Record<targetPath, linkCount>>
+    for (const sourcePath in resolvedLinks) {
+      const targetLinks = resolvedLinks[sourcePath];
+      if (targetLinks && targetFile.path in targetLinks) {
+        // This source file links to our target
+        const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
+        if (sourceFile instanceof TFile) {
+          backlinks.push(sourceFile);
+        }
+      }
+    }
+
+    return backlinks;
+  }
+
+  /**
+   * Extract context snippets from a source file for all links pointing to target
+   * @param targetFile The file being linked TO
+   * @param sourceFile The file containing the backlinks
+   * @param contextLines Number of lines before/after (0 = full paragraph)
+   * @returns Array of snippets with line numbers
+   */
+  async getBacklinkSnippets(
+    targetFile: TFile,
+    sourceFile: TFile,
+    contextLines: number = 2
+  ): Promise<Array<{ snippet: string; line: number }>> {
+    const snippets: Array<{ snippet: string; line: number }> = [];
+    const cache = this.app.metadataCache.getFileCache(sourceFile);
+
+    if (!cache?.links) {
+      return snippets;
+    }
+
+    const content = await this.app.vault.read(sourceFile);
+
+    for (const link of cache.links) {
+      // Check if this link points to our target file
+      const resolvedFile = this.app.metadataCache.getFirstLinkpathDest(
+        link.link,
+        sourceFile.path
+      );
+
+      if (resolvedFile?.path === targetFile.path) {
+        const lineNumber = link.position.start.line;
+        const snippet = this.extractContextAroundLine(content, lineNumber, contextLines);
+        snippets.push({ snippet, line: lineNumber });
+      }
+    }
+
+    return snippets;
+  }
+
+  /**
+   * Extract context around a specific line
+   * @param content The full file content
+   * @param targetLine The line number (0-indexed) to extract context around
+   * @param contextLines Number of lines before/after (0 = header section)
+   * @returns The extracted context string
+   */
+  private extractContextAroundLine(
+    content: string,
+    targetLine: number,
+    contextLines: number
+  ): string {
+    const lines = content.split('\n');
+
+    if (contextLines === 0) {
+      // Header section mode: find the containing section
+      let start = targetLine;
+      let end = targetLine;
+
+      // Walk backward to find the nearest header (or start of file)
+      while (start > 0 && !lines[start].match(/^#+\s/)) {
+        start--;
+      }
+
+      // Walk forward to find the next header (or end of file)
+      end = targetLine + 1;
+      while (end < lines.length && !lines[end].match(/^#+\s/)) {
+        end++;
+      }
+      end--; // Don't include the next header
+
+      return lines.slice(start, end + 1).join('\n');
+    } else {
+      // Fixed lines mode: N lines before and after
+      const start = Math.max(0, targetLine - contextLines);
+      const end = Math.min(lines.length - 1, targetLine + contextLines);
+      return lines.slice(start, end + 1).join('\n');
+    }
+  }
+
+  /**
    * Convert date format string to regex pattern
    * @param format The date format string (e.g., "### YYYY-MM-DD")
    * @returns Regex pattern for matching date headers

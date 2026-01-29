@@ -11,6 +11,8 @@ export interface ContextGatheringDefaults {
   linkDepth: number;
   maxCharacters: number;
   filterRecentSectionsOnly: boolean;
+  includeBacklinks: boolean;
+  backlinkContextLines: number;  // 0 = header section, N = lines before/after
 }
 
 export interface OpenAugiSettings {
@@ -48,6 +50,8 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
   contextGatheringDefaults: {
     linkDepth: 1,
     maxCharacters: 100000,
-    filterRecentSectionsOnly: true
+    filterRecentSectionsOnly: true,
+    includeBacklinks: true,
+    backlinkContextLines: 0
   }
 }; 

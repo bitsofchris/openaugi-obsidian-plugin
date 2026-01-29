@@ -104,7 +104,9 @@ OpenAugi/
 Content discovery and aggregation.
 
 **Discovery Methods:**
-- `getLinkedNotes(file)` - Get all linked notes from a file
+- `getLinkedNotes(file)` - Get all forward-linked notes from a file
+- `getBacklinksForFile(targetFile)` - Get all notes that link TO the target file
+- `getBacklinkSnippets(targetFile, sourceFile, contextLines)` - Extract context around backlinks
 - `getRecentlyModifiedNotes(daysBack, excludeFolders, fromDate?, toDate?)` - Time-based discovery
 
 **Aggregation:**
@@ -114,6 +116,7 @@ Content discovery and aggregation.
 - `[[wikilinks]]` and embeds
 - Dataview queries (if plugin available)
 - Checkbox collections: only `[x]` checked items
+- **Backlinks** - Notes that link TO discovered notes (header section/line extraction)
 
 **Journal Filtering:**
 - Detects date headers (e.g., `### YYYY-MM-DD`)
@@ -136,9 +139,12 @@ gatherContext(config: ContextGatheringConfig): Promise<GatheredContext>
 2. **Recent Activity** - Time-based discovery
 
 **Features:**
+- Bidirectional link traversal (forward links + backlinks at each depth level)
+- Forward links: extract full note content
+- Backlinks: extract header section/lines around the link reference
 - Character limit enforcement
 - Folder exclusion filtering
-- Returns discovered notes with metadata (depth, source, size)
+- Returns discovered notes with metadata (depth, source, size, isBacklink)
 
 ---
 
@@ -167,6 +173,8 @@ interface OpenAugiSettings {
     linkDepth: 1 | 2 | 3          // Default: 1
     maxCharacters: number         // Default: 100000
     filterRecentSectionsOnly: boolean
+    includeBacklinks: boolean     // Default: true
+    backlinkContextLines: number  // Default: 0 (0 = header section)
   }
 }
 ```
@@ -188,14 +196,19 @@ interface ContextGatheringConfig {
   excludeFolders: string[]
   filterRecentSectionsOnly: boolean
   journalSectionDays?: number
+  includeBacklinks?: boolean      // Enable backlink discovery
+  backlinkContextLines?: number   // 0 = header section, N = lines before/after
 }
 
 interface DiscoveredNote {
   file: TFile
   depth: number                   // 0 = root, 1-3 = linked depth
-  discoveredVia: string           // "root" | "linked from [[X]]" | "recent activity"
+  discoveredVia: string           // "root" | "linked from [[X]]" | "backlink from [[X]]" | "recent activity"
   estimatedChars: number
   included: boolean               // false if exceeded character limit
+  isBacklink: boolean             // true if discovered via backlink
+  backlinkSnippet?: string        // Extracted header section/lines (backlinks only)
+  backlinkLine?: number           // Line number of link (backlinks only)
 }
 
 interface GatheredContext {

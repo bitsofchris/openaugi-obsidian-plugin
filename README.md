@@ -144,12 +144,43 @@ Gather all project documentation:
 ### Key Features
 
 ✅ **Link depth traversal** - Go up to 3 levels deep (breadth-first search)
+✅ **Backlink context** - Also gather context from notes that link TO your notes
 ✅ **Checkbox review** - Toggle individual notes before processing
 ✅ **Character limits** - Prevents token overflow (default: 100k)
 ✅ **Dual output modes** - Distill (atomic notes) OR Publish (blog post)
 ✅ **Journal filtering** - Extract only recent sections from journal notes
 ✅ **Raw context saving** - Skip AI, just aggregate content
 ✅ **Custom prompts** - Use lenses for focused processing
+
+### Backlink Context Extraction
+
+**NEW**: Gather richer context by including notes that reference your discovered notes.
+
+When you discuss an idea in multiple places and link back to a central note, OpenAugi can now extract those references automatically. Instead of just following forward links, it also finds notes that link TO each discovered note and extracts the header section containing the reference.
+
+**How to use:**
+1. Run "Process notes" on any note
+2. Backlinks are included by default (toggle off with **"Include backlinks"** if needed)
+3. Optionally adjust **"Backlink context"** (0 = header section, 1-5 = lines before/after)
+4. Review discovered notes - backlinks show with a "← backlink" badge
+5. Backlink snippets appear in a separate "# Backlinks" section in the output
+
+**Example:**
+```
+You have:
+- [[Project Alpha]] - your main project note
+- [[Meeting Notes 2025-01-15]] - contains "discussed [[Project Alpha]] timeline"
+- [[Ideas]] - contains "this reminds me of [[Project Alpha]]"
+
+With backlinks enabled:
+- Project Alpha's forward links are included (full content)
+- Meeting Notes snippet: "discussed [[Project Alpha]] timeline"
+- Ideas snippet: "this reminds me of [[Project Alpha]]"
+```
+
+**Settings:**
+- **Include backlinks by default** - Enabled by default; toggle in Settings → Context Gathering
+- **Backlink context lines** - Default lines to extract (0 = header section, 1-5 = fixed lines)
 
 ---
 
@@ -343,6 +374,8 @@ Configure defaults for the unified context gathering system:
 - **Default Link Depth**: Initial depth for link traversal (1-3, default: 1)
 - **Default Max Characters**: Character limit before stopping discovery (default: 100,000)
 - **Filter Recent Sections by Default**: Automatically enable journal section filtering (default: On)
+- **Include Backlinks by Default**: Also discover notes that link to discovered notes (default: On)
+- **Backlink Context Lines**: Lines to extract around each backlink reference (0 = header section, default: 0)
 
 ### Recent Activity Settings
 Configure defaults for recent activity processing:
