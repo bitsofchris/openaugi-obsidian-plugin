@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting } from 'obsidian';
 import { GatheredContext } from '../types/context';
 
 export class ContextPreviewModal extends Modal {
@@ -128,6 +128,14 @@ export class ContextPreviewModal extends Modal {
       .addButton(button => button
         .setButtonText('Back')
         .onClick(() => this.close())
+      )
+      .addButton(button => button
+        .setButtonText('Copy to Clipboard')
+        .setTooltip('Copy the gathered context to clipboard')
+        .onClick(async () => {
+          await navigator.clipboard.writeText(this.context.aggregatedContent);
+          new Notice('Context copied to clipboard!');
+        })
       )
       .addButton(button => button
         .setButtonText('Save Raw Context')
