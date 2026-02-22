@@ -135,6 +135,7 @@ export class ContextPreviewModal extends Modal {
         .onClick(async () => {
           await navigator.clipboard.writeText(this.context.aggregatedContent);
           new Notice('Context copied to clipboard!');
+          this.close();
         })
       )
       .addButton(button => button
