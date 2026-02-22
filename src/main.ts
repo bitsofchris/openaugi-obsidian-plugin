@@ -668,4 +668,5 @@ export default class OpenAugiPlugin extends Plugin {
       throw error;
     }
   }
-} 
+
+}

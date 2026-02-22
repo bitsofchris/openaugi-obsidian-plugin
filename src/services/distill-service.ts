@@ -225,48 +225,46 @@ ${content}
     // @ts-ignore - Dataview API is not typed
     const dataviewPlugin = this.app.plugins.plugins["dataview"];
     if (!dataviewPlugin?.api) {
-      console.log("Dataview plugin not available");
+      console.log("[OpenAugi] Dataview plugin not available");
       return [];
     }
 
     const dvApi = dataviewPlugin.api;
     const files: TFile[] = [];
-    
-    try {
-      // Use dataview API to execute query
-      const queryResult = await dvApi.queryMarkdown(query, sourcePath);
 
-      if (queryResult.successful) {
-        // Process based on query type
-        if (typeof queryResult.value === "object" && queryResult.value !== null && queryResult.value.type === "list") {
-          // Handle LIST query result as object
+    try {
+      // Use the structured query API (dvApi.query) which returns Link objects
+      // with clean file paths. The older queryMarkdown approach returned rendered
+      // markdown where TABLE queries escape pipes as \| inside [[path\|alias]],
+      // breaking path resolution.
+      const queryResult = await dvApi.query(query, sourcePath);
+
+      if (queryResult.successful && queryResult.value) {
+        if (queryResult.value.type === "list") {
           for (const item of queryResult.value.values) {
-            if (item.type === "file" && item.path) {
+            if (item && typeof item === "object" && "path" in item && typeof item.path === "string") {
               const file = this.app.vault.getAbstractFileByPath(item.path);
               if (file instanceof TFile) {
                 files.push(file);
               }
             }
           }
-        } else if (typeof queryResult.value === "object" && queryResult.value !== null && queryResult.value.type === "table") {
-          // Handle TABLE query result as object
+        } else if (queryResult.value.type === "table") {
           for (const row of queryResult.value.values) {
-            if (row[0]?.path) {
-              const file = this.app.vault.getAbstractFileByPath(row[0].path);
+            const firstCol = row[0];
+            if (firstCol && typeof firstCol === "object" && "path" in firstCol && typeof firstCol.path === "string") {
+              const file = this.app.vault.getAbstractFileByPath(firstCol.path);
               if (file instanceof TFile) {
                 files.push(file);
               }
             }
           }
-        } else if (typeof queryResult.value === "string") {
-          // Extract all kinds of links that might appear in dataview output
-          this.extractLinksFromString(queryResult.value, sourcePath, files);
         }
       }
     } catch (error) {
-      console.error("Error executing dataview query:", error);
+      console.error("[OpenAugi] Error executing dataview query:", error);
     }
-    
+
     return files;
   }
   
