@@ -7,6 +7,8 @@ This guide walks through the complete process of publishing a new OpenAugi plugi
 Before starting the release process:
 
 - [ ] All features/fixes are merged to master
+- [ ] **Automated tests pass** (`npm test`) — see [TESTING.md](TESTING.md)
+- [ ] New features have test coverage (add to `tests/`)
 - [ ] Code builds without errors (`npm run build`)
 - [ ] Type checking passes (`npm run typecheck`)
 - [ ] Manual testing completed in test vault (`/Users/chris/zk-for-testing`)
@@ -110,6 +112,7 @@ Ensure all docs reflect the new release:
 
 ```bash
 # Full release flow (example for version 0.4.0)
+npm test
 npm run build
 npm run typecheck
 

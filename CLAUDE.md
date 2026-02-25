@@ -72,7 +72,18 @@ There is no standalone `typecheck` script — `npm run build` runs `tsc -noEmit 
 - No external runtime dependencies (only Obsidian API)
 
 ### Testing
-Currently no automated tests. Manual testing through Obsidian's developer console.
+
+Automated test suite using Vitest with a mock Obsidian API. See [docs/TESTING.md](docs/TESTING.md) for full details.
+
+```bash
+# Run all tests
+npm test
+
+# Watch mode
+npm run test:watch
+```
+
+Tests cover: filename utils, OpenAI prompt building, link extraction, BFS traversal, content aggregation, file output, journal filtering, backlink discovery. New features should include test coverage.
 
 ## API Integration
 
