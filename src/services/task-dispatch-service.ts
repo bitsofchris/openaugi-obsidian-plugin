@@ -292,7 +292,7 @@ export class TaskDispatchService {
       context += `\n\n---\n\n## Linked Context\n${linkedContent}`;
     }
 
-    context += `\n\n---\n\n## Instructions\n\nTask file: ${file.path}\nTask ID: ${taskId}\n\nWork with the context above first. Only search the vault via MCP if needed.\n\nWhen you have results, write them back using:\n  python main.py append-results --task-id ${taskId} --input results.json\n\nThe ## Results section of the task note is our shared communication channel.\nLink any files you create as [[wikilinks]] in your results.\n\nYou have MCP tools available for searching the user's Obsidian vault (semantic search, tag search, hub discovery, etc.). Use them to find related notes, look up referenced concepts, or gather additional context when the information above is insufficient.`;
+    context += `\n\n---\n\n## Instructions\n\nTask file: ${file.path}\nTask ID: ${taskId}\n\nWork with the context above first. Only search the vault via MCP if needed.\n\nWhen you have results, use the MCP append_results tool to write them back to the task note.\nThe ## Results section of the task note is our shared communication channel.\nLink any files you create as [[wikilinks]] in your results.\n\nYou have MCP tools available for searching the user's Obsidian vault (semantic search, tag search, hub discovery, etc.) and for writing results back. Use them to find related notes, look up referenced concepts, or gather additional context when the information above is insufficient.`;
 
     // Cap at max characters
     const maxChars = this.settings.taskDispatch.maxContextChars;

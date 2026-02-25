@@ -280,7 +280,7 @@ describe('TaskDispatchService', () => {
       expect(context).toContain('## Instructions');
       expect(context).toContain('Task file: Notes/Task 1.md');
       expect(context).toContain('Task ID: test-1');
-      expect(context).toContain('python main.py append-results --task-id test-1');
+      expect(context).toContain('MCP append_results tool');
       expect(context).toContain('## Results section');
       expect(context).toContain('[[wikilinks]]');
     });
