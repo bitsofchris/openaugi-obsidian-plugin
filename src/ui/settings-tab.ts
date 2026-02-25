@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, Notice, DropdownComponent } from 'obsid
 import type OpenAugiPlugin from '../types/plugin';
 import { OpenAIService } from '../services/openai-service';
 import { TerminalApp } from '../types/task-dispatch';
+import { detectTmuxPath } from '../services/task-dispatch-service';
 
 export class OpenAugiSettingTab extends PluginSettingTab {
   plugin: OpenAugiPlugin;
@@ -364,6 +365,37 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.taskDispatch.terminalApp = value as TerminalApp;
           await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('tmux path')
+      .setDesc('Absolute path to the tmux binary. Leave empty to auto-detect.')
+      .addText(text => {
+        text
+          .setPlaceholder('Auto-detect')
+          .setValue(this.plugin.settings.taskDispatch.tmuxPath);
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue().trim();
+          if (value !== this.plugin.settings.taskDispatch.tmuxPath) {
+            this.plugin.settings.taskDispatch.tmuxPath = value;
+            await this.plugin.saveSettings();
+          }
+        });
+        return text;
+      })
+      .addButton(button => button
+        .setButtonText('Detect')
+        .onClick(async () => {
+          const found = await detectTmuxPath();
+          if (found) {
+            this.plugin.settings.taskDispatch.tmuxPath = found;
+            await this.plugin.saveSettings();
+            new Notice(`tmux found: ${found}`);
+            this.display(); // refresh the UI to show the detected path
+          } else {
+            new Notice('tmux not found. Install with: brew install tmux');
+          }
         })
       );
 

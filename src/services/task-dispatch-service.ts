@@ -9,6 +9,38 @@ import { AgentConfig, TaskSession } from '../types/task-dispatch';
 
 const execAsync = promisify(exec);
 
+/** Common locations where Homebrew installs tmux. */
+const TMUX_SEARCH_PATHS = [
+  '/opt/homebrew/bin/tmux',   // Apple Silicon Homebrew
+  '/usr/local/bin/tmux',      // Intel Homebrew
+  '/usr/bin/tmux',            // system install
+];
+
+/**
+ * Try to locate the tmux binary on disk.
+ * Returns the absolute path if found, or null.
+ */
+export async function detectTmuxPath(): Promise<string | null> {
+  for (const p of TMUX_SEARCH_PATHS) {
+    try {
+      await fs.promises.access(p, fs.constants.X_OK);
+      return p;
+    } catch { /* not here */ }
+  }
+  // Fallback: try `which` with an augmented PATH
+  try {
+    const { stdout } = await execAsync('which tmux', {
+      env: {
+        ...process.env,
+        PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH ?? '/usr/bin:/bin'}`,
+      },
+    });
+    const found = stdout.trim();
+    if (found) return found;
+  } catch { /* not found */ }
+  return null;
+}
+
 export class TaskDispatchService {
   private app: App;
   private settings: OpenAugiSettings;
@@ -22,6 +54,16 @@ export class TaskDispatchService {
     this.app = app;
     this.settings = settings;
     this.distillService = distillService;
+  }
+
+  /** Resolve the tmux binary path from settings or auto-detect. */
+  private async getTmux(): Promise<string> {
+    const configured = this.settings.taskDispatch.tmuxPath;
+    if (configured) return configured;
+
+    const detected = await detectTmuxPath();
+    if (detected) return detected;
+    throw new Error('tmux not found. Set the path in Settings → Task Dispatch, or install with: brew install tmux');
   }
 
   /**
@@ -40,7 +82,8 @@ export class TaskDispatchService {
     const agentConfig = this.getAgentConfig();
 
     try {
-      const exists = await this.tmuxSessionExists(sessionName);
+      const tmux = await this.getTmux();
+      const exists = await this.tmuxSessionExists(tmux, sessionName);
 
       if (exists) {
         new Notice(`Attaching to session: ${taskId}`);
@@ -51,18 +94,13 @@ export class TaskDispatchService {
         const contextContent = await this.assembleContext(file, taskId);
         const contextFilePath = await this.writeContextFile(taskId, contextContent);
 
-        await this.createTmuxSession(sessionName, agentConfig, contextFilePath);
+        await this.createTmuxSession(tmux, sessionName, agentConfig, contextFilePath);
         await this.openTerminal(sessionName);
       }
     } catch (error) {
       console.error('Task dispatch error:', error);
       const msg = error instanceof Error ? error.message : String(error);
-
-      if (msg.includes('tmux') && msg.includes('not found')) {
-        new Notice('tmux is not installed. Install it with: brew install tmux');
-      } else {
-        new Notice(`Task dispatch failed: ${msg}`);
-      }
+      new Notice(`Task dispatch failed: ${msg}`);
     }
   }
 
@@ -79,13 +117,14 @@ export class TaskDispatchService {
     const sessionName = `task-${taskId}`;
 
     try {
-      const exists = await this.tmuxSessionExists(sessionName);
+      const tmux = await this.getTmux();
+      const exists = await this.tmuxSessionExists(tmux, sessionName);
       if (!exists) {
         new Notice(`No active session for: ${taskId}`);
         return;
       }
 
-      await execAsync(`tmux kill-session -t ${this.shellEscape(sessionName)}`);
+      await execAsync(`${tmux} kill-session -t ${this.shellEscape(sessionName)}`);
       this.cleanupContextFile(taskId);
 
       new Notice(`Killed session: ${taskId}`);
@@ -101,7 +140,8 @@ export class TaskDispatchService {
   async killSessionById(taskId: string): Promise<void> {
     const sessionName = `task-${taskId}`;
     try {
-      await execAsync(`tmux kill-session -t ${this.shellEscape(sessionName)}`);
+      const tmux = await this.getTmux();
+      await execAsync(`${tmux} kill-session -t ${this.shellEscape(sessionName)}`);
       this.cleanupContextFile(taskId);
     } catch (error) {
       console.error('Failed to kill session:', error);
@@ -114,8 +154,9 @@ export class TaskDispatchService {
    */
   async listActiveSessions(): Promise<TaskSession[]> {
     try {
+      const tmux = await this.getTmux();
       const { stdout } = await execAsync(
-        'tmux list-sessions -F "#{session_name} #{session_created}" 2>/dev/null'
+        `${tmux} list-sessions -F "#{session_name} #{session_created}" 2>/dev/null`
       );
 
       const sessions: TaskSession[] = [];
@@ -155,8 +196,9 @@ export class TaskDispatchService {
    * Open terminal attached to a tmux session (public for use from modal).
    */
   async openTerminal(sessionName: string): Promise<void> {
+    const tmux = await this.getTmux();
     const terminalApp = this.settings.taskDispatch.terminalApp;
-    const attachCmd = `tmux attach -t ${this.shellEscape(sessionName)}`;
+    const attachCmd = `${tmux} attach -t ${this.shellEscape(sessionName)}`;
 
     let osascript: string;
     if (terminalApp === 'iterm2') {
@@ -242,9 +284,9 @@ export class TaskDispatchService {
     }
   }
 
-  private async tmuxSessionExists(sessionName: string): Promise<boolean> {
+  private async tmuxSessionExists(tmux: string, sessionName: string): Promise<boolean> {
     try {
-      await execAsync(`tmux has-session -t ${this.shellEscape(sessionName)} 2>/dev/null`);
+      await execAsync(`${tmux} has-session -t ${this.shellEscape(sessionName)} 2>/dev/null`);
       return true;
     } catch {
       return false;
@@ -252,15 +294,16 @@ export class TaskDispatchService {
   }
 
   private async createTmuxSession(
+    tmux: string,
     sessionName: string,
     agentConfig: AgentConfig,
     contextFilePath: string
   ): Promise<void> {
-    await execAsync(`tmux new-session -d -s ${this.shellEscape(sessionName)}`);
+    await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)}`);
 
     const agentCommand = `${agentConfig.command} ${agentConfig.contextFlag} ${this.shellEscape(contextFilePath)}`;
     await execAsync(
-      `tmux send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCommand)} Enter`
+      `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCommand)} Enter`
     );
   }
 
