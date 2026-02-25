@@ -180,7 +180,8 @@ export class TaskDispatchService {
    */
   private getTaskId(file: TFile): string | null {
     const cache = this.app.metadataCache.getFileCache(file);
-    const taskId = cache?.frontmatter?.['task_id'];
+    const fm = cache?.frontmatter;
+    const taskId = fm?.['task_id'] || fm?.['task-id'];
     return taskId ? String(taskId) : null;
   }
 
@@ -273,7 +274,8 @@ export class TaskDispatchService {
     const files = this.app.vault.getMarkdownFiles();
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      if (cache?.frontmatter?.['task_id'] === taskId) {
+      const fm = cache?.frontmatter;
+      if (fm?.['task_id'] === taskId || fm?.['task-id'] === taskId) {
         return file;
       }
     }
