@@ -298,19 +298,16 @@ export class TaskDispatchService {
   }
 
   private cleanupContextFile(taskId: string): void {
-    const dir = this.settings.taskDispatch.contextTempDir;
-    const files = [
-      path.join(dir, `task-${taskId}-context.md`),
-      path.join(dir, `task-${taskId}-launch.sh`),
-    ];
-    for (const filePath of files) {
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      } catch {
-        // Non-critical, ignore cleanup failures
+    const filePath = path.join(
+      this.settings.taskDispatch.contextTempDir,
+      `task-${taskId}-context.md`
+    );
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
       }
+    } catch {
+      // Non-critical, ignore cleanup failures
     }
   }
 
@@ -330,21 +327,16 @@ export class TaskDispatchService {
     contextFilePath: string,
     workingDir: string
   ): Promise<void> {
-    await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)}`);
+    // Build the agent command that reads context from the temp file.
+    // --append-system-prompt works in interactive mode (unlike --append-system-prompt-file
+    // which is print-mode only). $(cat ...) is expanded by the shell inside tmux.
+    const agentCmd = `${agentConfig.command} ${agentConfig.contextFlag} "$(cat ${this.shellEscape(contextFilePath)})" "Read the task above and begin. Summarize what you understand, then start working."`;
 
-    // Write a launcher script that reads context from the temp file and passes
-    // it to the agent via --append-system-prompt (which works in interactive mode,
-    // unlike --append-system-prompt-file which is print-mode only).
-    // This avoids piping potentially 200k+ chars through tmux send-keys.
-    const launcherPath = contextFilePath.replace('-context.md', '-launch.sh');
-    const launcherScript = [
-      '#!/bin/bash',
-      `${agentConfig.command} ${agentConfig.contextFlag} "$(cat "${contextFilePath}")" "Read the task above and begin. Summarize what you understand, then start working."`,
-    ].join('\n');
-    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
-
+    // Pass the command directly to new-session so it runs as the initial shell
+    // command. This avoids the race condition where send-keys fires before the
+    // shell is ready (which swallows the first character).
     await execAsync(
-      `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(launcherPath)} Enter`
+      `${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)} ${this.shellEscape(agentCmd)}`
     );
   }
 
