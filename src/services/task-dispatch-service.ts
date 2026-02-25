@@ -1,4 +1,4 @@
-import { App, TFile, Notice } from 'obsidian';
+import { App, TFile, Notice, FileSystemAdapter } from 'obsidian';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
@@ -230,18 +230,28 @@ export class TaskDispatchService {
 
   /**
    * Resolve the working directory for a task session.
-   * Priority: `repo` frontmatter → defaultWorkingDir setting → home dir.
+   * Priority: `working_dir` frontmatter → defaultWorkingDir setting → home dir.
    */
   private getWorkingDir(file: TFile): string {
     const cache = this.app.metadataCache.getFileCache(file);
     const fm = cache?.frontmatter;
-    const repo = fm?.['repo'];
-    if (repo && typeof repo === 'string') return repo;
+    const workingDir = fm?.['working_dir'] || fm?.['working-dir'];
+    // Absolute paths from frontmatter are used as-is
+    if (workingDir && typeof workingDir === 'string') {
+      return path.isAbsolute(workingDir) ? workingDir : this.resolveVaultPath(workingDir);
+    }
 
     const defaultDir = this.settings.taskDispatch.defaultWorkingDir;
-    if (defaultDir) return defaultDir;
+    if (defaultDir) {
+      return path.isAbsolute(defaultDir) ? defaultDir : this.resolveVaultPath(defaultDir);
+    }
 
     return process.env.HOME ?? '/tmp';
+  }
+
+  private resolveVaultPath(relative: string): string {
+    const adapter = this.app.vault.adapter as FileSystemAdapter;
+    return path.join(adapter.getBasePath(), relative);
   }
 
   private async assembleContext(file: TFile, taskId: string): Promise<string> {
