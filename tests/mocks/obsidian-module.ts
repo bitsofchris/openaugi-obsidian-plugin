@@ -66,5 +66,11 @@ export class Notice {
   }
 }
 
+export class FileSystemAdapter {
+  private basePath: string;
+  constructor(basePath?: string) { this.basePath = basePath || ''; }
+  getBasePath(): string { return this.basePath; }
+}
+
 export class MarkdownView {}
 export class WorkspaceLeaf {}

@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { OpenAugiSettings } from '../types/settings';
 import { DistillService } from './distill-service';
-import { AgentConfig, TaskSession } from '../types/task-dispatch';
+import { AgentConfig, RepoPath, TaskSession } from '../types/task-dispatch';
 
 const execAsync = promisify(exec);
 
@@ -39,6 +39,16 @@ export async function detectTmuxPath(): Promise<string | null> {
     if (found) return found;
   } catch { /* not found */ }
   return null;
+}
+
+/**
+ * Look up a working_dir value against the configured repo paths.
+ * Case-insensitive match. Returns the absolute path if found, or null.
+ */
+export function resolveRepoPath(name: string, repoPaths: RepoPath[]): string | null {
+  if (!repoPaths || repoPaths.length === 0) return null;
+  const match = repoPaths.find(rp => rp.name.toLowerCase() === name.toLowerCase());
+  return match?.path ?? null;
 }
 
 export class TaskDispatchService {
@@ -236,9 +246,17 @@ export class TaskDispatchService {
     const cache = this.app.metadataCache.getFileCache(file);
     const fm = cache?.frontmatter;
     const workingDir = fm?.['working_dir'] || fm?.['working-dir'];
-    // Absolute paths from frontmatter are used as-is
+
     if (workingDir && typeof workingDir === 'string') {
-      return path.isAbsolute(workingDir) ? workingDir : this.resolveVaultPath(workingDir);
+      // 1. Check if it matches a named repo path
+      const repoMatch = resolveRepoPath(workingDir, this.settings.taskDispatch.repoPaths);
+      if (repoMatch) return repoMatch;
+
+      // 2. Absolute path — use as-is
+      if (path.isAbsolute(workingDir)) return workingDir;
+
+      // 3. Relative path — resolve against vault root
+      return this.resolveVaultPath(workingDir);
     }
 
     const defaultDir = this.settings.taskDispatch.defaultWorkingDir;
@@ -274,7 +292,7 @@ export class TaskDispatchService {
       context += `\n\n---\n\n## Linked Context\n${linkedContent}`;
     }
 
-    context += '\n\n---\n\n## Additional Context\n\nThe OpenAugi MCP server is available if you need to query for more context beyond what\'s provided here.';
+    context += `\n\n---\n\n## Instructions\n\nTask file: ${file.path}\nTask ID: ${taskId}\n\nWork with the context above first. Only search the vault via MCP if needed.\n\nWhen you have results, write them back using:\n  python main.py append-results --task-id ${taskId} --input results.json\n\nThe ## Results section of the task note is our shared communication channel.\nLink any files you create as [[wikilinks]] in your results.\n\nYou have MCP tools available for searching the user's Obsidian vault (semantic search, tag search, hub discovery, etc.). Use them to find related notes, look up referenced concepts, or gather additional context when the information above is insufficient.`;
 
     // Cap at max characters
     const maxChars = this.settings.taskDispatch.maxContextChars;
@@ -344,7 +362,8 @@ export class TaskDispatchService {
       : `"$(cat ${this.shellEscape(contextFilePath)})"`;
     // Explicit cd ensures Claude picks up the correct workspace, even if the
     // user's shell profile overrides the tmux -c starting directory.
-    const agentCmd = `cd ${this.shellEscape(workingDir)} && ${agentConfig.command} ${agentConfig.contextFlag} ${contextArg} "Read the task above and begin. Summarize what you understand, then start working."`;
+    const prompt = 'Read your system prompt carefully. Summarize the task, outline your approach, then begin working.';
+    const agentCmd = `cd ${this.shellEscape(workingDir)} && ${agentConfig.command} ${agentConfig.contextFlag} ${contextArg} "${prompt}"`;
     await execAsync(
       `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCmd)} Enter`
     );

@@ -416,6 +416,15 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         return text;
       });
 
+    // --- Repo Paths ---
+    containerEl.createEl('h4', { text: 'Repository Paths' });
+    containerEl.createEl('p', {
+      text: 'Map short names to repo folders. Use the name in frontmatter working_dir instead of typing full paths.',
+      cls: 'setting-item-description'
+    });
+    const repoPathsContainer = containerEl.createDiv('repo-paths-container');
+    this.renderRepoPaths(repoPathsContainer);
+
     new Setting(containerEl)
       .setName('Default agent')
       .setDesc('Agent to use when task note does not specify one')
@@ -476,4 +485,121 @@ export class OpenAugiSettingTab extends PluginSettingTab {
         })
       );
   }
-} 
+
+  private renderRepoPaths(container: HTMLElement): void {
+    container.empty();
+    const repoPaths = this.plugin.settings.taskDispatch.repoPaths;
+
+    for (let i = 0; i < repoPaths.length; i++) {
+      const rp = repoPaths[i];
+
+      new Setting(container)
+        .addText(text => {
+          text
+            .setPlaceholder('Name (e.g. my-repo)')
+            .setValue(rp.name);
+          text.inputEl.style.width = '120px';
+          text.inputEl.addEventListener('blur', async () => {
+            const value = text.getValue().trim();
+            if (value !== this.plugin.settings.taskDispatch.repoPaths[i].name) {
+              this.plugin.settings.taskDispatch.repoPaths[i].name = value;
+              await this.plugin.saveSettings();
+            }
+          });
+          return text;
+        })
+        .addText(text => {
+          text
+            .setPlaceholder('/absolute/path/to/repo')
+            .setValue(rp.path);
+          text.inputEl.style.width = '280px';
+          text.inputEl.addEventListener('blur', async () => {
+            const value = text.getValue().trim();
+            if (value !== this.plugin.settings.taskDispatch.repoPaths[i].path) {
+              this.plugin.settings.taskDispatch.repoPaths[i].path = value;
+              await this.plugin.saveSettings();
+            }
+          });
+          return text;
+        })
+        .addExtraButton(button => button
+          .setIcon('folder-open')
+          .setTooltip('Browse')
+          .onClick(async () => {
+            const chosen = await this.pickFolder();
+            if (chosen) {
+              this.plugin.settings.taskDispatch.repoPaths[i].path = chosen;
+              // Auto-fill name from folder basename if empty
+              if (!this.plugin.settings.taskDispatch.repoPaths[i].name) {
+                const basename = chosen.split('/').pop() || '';
+                this.plugin.settings.taskDispatch.repoPaths[i].name = basename;
+              }
+              await this.plugin.saveSettings();
+              this.renderRepoPaths(container);
+            }
+          })
+        )
+        .addExtraButton(button => button
+          .setIcon('trash')
+          .setTooltip('Remove')
+          .onClick(async () => {
+            this.plugin.settings.taskDispatch.repoPaths.splice(i, 1);
+            await this.plugin.saveSettings();
+            this.renderRepoPaths(container);
+          })
+        );
+    }
+
+    new Setting(container)
+      .addButton(button => button
+        .setButtonText('Add repo path')
+        .onClick(async () => {
+          this.plugin.settings.taskDispatch.repoPaths.push({ name: '', path: '' });
+          await this.plugin.saveSettings();
+          this.renderRepoPaths(container);
+        })
+      );
+  }
+
+  /**
+   * Open the native OS folder picker via Electron's dialog API.
+   * Tries multiple Electron require paths for compatibility across Obsidian versions.
+   * Returns the selected path, or null if cancelled.
+   */
+  private async pickFolder(): Promise<string | null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dialog: any = null;
+
+    try {
+      // Modern Obsidian / Electron: @electron/remote
+      dialog = require('@electron/remote')?.dialog;
+    } catch { /* not available */ }
+
+    if (!dialog) {
+      try {
+        // Older Electron: remote on the electron module
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const electron = require('electron');
+        dialog = (electron as any).remote?.dialog;
+      } catch { /* not available */ }
+    }
+
+    if (!dialog) {
+      new Notice('Folder picker not available — type the path manually.');
+      return null;
+    }
+
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Select repository folder'
+      });
+      if (!result.canceled && result.filePaths.length > 0) {
+        return result.filePaths[0];
+      }
+    } catch {
+      new Notice('Folder picker failed — type the path manually.');
+    }
+    return null;
+  }
+}

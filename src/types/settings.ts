@@ -70,6 +70,7 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
     ],
     defaultAgent: 'claude-code',
     contextTempDir: '/tmp/openaugi',
-    maxContextChars: 200000
+    maxContextChars: 200000,
+    repoPaths: []
   }
 }; 

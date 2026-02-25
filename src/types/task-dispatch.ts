@@ -7,6 +7,11 @@ export interface AgentConfig {
   contextFlag: string;
 }
 
+export interface RepoPath {
+  name: string;   // short name used in frontmatter, e.g. "my-repo"
+  path: string;   // absolute filesystem path, e.g. "/Users/chris/repos/my-repo"
+}
+
 export type TerminalApp = 'iterm2' | 'terminal-app';
 
 export interface TaskDispatchSettings {
@@ -17,6 +22,7 @@ export interface TaskDispatchSettings {
   defaultAgent: string;
   contextTempDir: string;
   maxContextChars: number;
+  repoPaths: RepoPath[];
 }
 
 export interface TaskSession {
