@@ -415,7 +415,7 @@ describe('TaskDispatchService', () => {
       vi.restoreAllMocks();
     });
 
-    it('creates tmux session then sends agent command', async () => {
+    it('creates tmux session then sends agent command with context as user prompt', async () => {
       // new-session
       mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
       // capture-pane for waitForShellReady
@@ -434,61 +434,19 @@ describe('TaskDispatchService', () => {
         '/usr/bin/tmux', 'task-test', agentConfig, '/tmp/ctx.md', '/home/user/project'
       );
 
-      // Verify new-session was called
       const calls = mockExecAsync.mock.calls.map((c: any[]) => c[0] as string);
+
+      // Verify new-session was called
       expect(calls.some(c => c.includes('new-session -d -s'))).toBe(true);
 
-      // Verify send-keys was called with the agent command
+      // Verify send-keys passes context file via $(cat ...) as user prompt
       const sendKeysCmd = calls.find(c => c.includes('send-keys'));
       expect(sendKeysCmd).toBeTruthy();
+      expect(sendKeysCmd).toContain('$(cat');
+      expect(sendKeysCmd).toContain('/tmp/ctx.md');
       expect(sendKeysCmd).toContain('Enter');
-    });
-
-    it('uses contextFlag -file variant to pass path directly', async () => {
-      mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
-      mockExecAsync.mockResolvedValueOnce({ stdout: '$ ', stderr: '' });
-      mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
-
-      const agentConfig = {
-        id: 'claude-code',
-        name: 'Claude Code',
-        command: 'claude',
-        contextFlag: '--append-system-prompt-file',
-      };
-
-      await (service as any).createTmuxSession(
-        '/usr/bin/tmux', 'task-test', agentConfig, '/tmp/ctx.md', '/home/user/project'
-      );
-
-      // The send-keys call should contain the file path directly (not $(cat ...))
-      const sendKeysCall = mockExecAsync.mock.calls.find(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('send-keys')
-      );
-      const cmd = sendKeysCall![0] as string;
-      expect(cmd).not.toContain('$(cat');
-    });
-
-    it('uses $(cat ...) for non-file context flag', async () => {
-      mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
-      mockExecAsync.mockResolvedValueOnce({ stdout: '$ ', stderr: '' });
-      mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
-
-      const agentConfig = {
-        id: 'test',
-        name: 'Test',
-        command: 'agent',
-        contextFlag: '--system-prompt',
-      };
-
-      await (service as any).createTmuxSession(
-        '/usr/bin/tmux', 'task-test', agentConfig, '/tmp/ctx.md', '/home/user/project'
-      );
-
-      const sendKeysCall = mockExecAsync.mock.calls.find(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('send-keys')
-      );
-      const cmd = sendKeysCall![0] as string;
-      expect(cmd).toContain('$(cat');
+      // Should NOT contain the contextFlag — context is the user prompt now
+      expect(sendKeysCmd).not.toContain('--append-system-prompt');
     });
   });
 

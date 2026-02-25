@@ -355,15 +355,8 @@ export class TaskDispatchService {
     // Without this, send-keys can fire before the shell is ready and characters get lost.
     await this.waitForShellReady(tmux, sessionName);
 
-    // If the flag expects a file path (e.g. --append-system-prompt-file), pass the path directly.
-    // Otherwise (e.g. --append-system-prompt), expand the file content inline via $(cat ...).
-    const contextArg = agentConfig.contextFlag.endsWith('-file')
-      ? this.shellEscape(contextFilePath)
-      : `"$(cat ${this.shellEscape(contextFilePath)})"`;
-    // Explicit cd ensures Claude picks up the correct workspace, even if the
-    // user's shell profile overrides the tmux -c starting directory.
-    const prompt = 'Read your system prompt carefully. Summarize the task, outline your approach, then begin working.';
-    const agentCmd = `cd ${this.shellEscape(workingDir)} && ${agentConfig.command} ${agentConfig.contextFlag} ${contextArg} "${prompt}"`;
+    // Pass the context file contents as the initial user prompt via $(cat ...).
+    const agentCmd = `cd ${this.shellEscape(workingDir)} && ${agentConfig.command} "$(cat ${this.shellEscape(contextFilePath)})"`;
     await execAsync(
       `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCmd)} Enter`
     );
