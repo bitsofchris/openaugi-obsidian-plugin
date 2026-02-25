@@ -59,6 +59,7 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
   taskDispatch: {
     terminalApp: 'iterm2',
     tmuxPath: '',
+    defaultWorkingDir: '',
     agents: [
       {
         id: 'claude-code',

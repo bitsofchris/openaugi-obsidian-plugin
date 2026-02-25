@@ -400,6 +400,23 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName('Default working directory')
+      .setDesc('Directory the agent launches in. Override per-task with `repo` in frontmatter.')
+      .addText(text => {
+        text
+          .setPlaceholder('~/projects')
+          .setValue(this.plugin.settings.taskDispatch.defaultWorkingDir);
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue().trim();
+          if (value !== this.plugin.settings.taskDispatch.defaultWorkingDir) {
+            this.plugin.settings.taskDispatch.defaultWorkingDir = value;
+            await this.plugin.saveSettings();
+          }
+        });
+        return text;
+      });
+
+    new Setting(containerEl)
       .setName('Default agent')
       .setDesc('Agent to use when task note does not specify one')
       .addDropdown(dropdown => {

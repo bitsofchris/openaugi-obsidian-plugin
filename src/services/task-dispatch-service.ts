@@ -94,7 +94,8 @@ export class TaskDispatchService {
         const contextContent = await this.assembleContext(file, taskId);
         const contextFilePath = await this.writeContextFile(taskId, contextContent);
 
-        await this.createTmuxSession(tmux, sessionName, agentConfig, contextFilePath);
+        const workingDir = this.getWorkingDir(file);
+        await this.createTmuxSession(tmux, sessionName, agentConfig, contextFilePath, workingDir);
         await this.openTerminal(sessionName);
       }
     } catch (error) {
@@ -227,6 +228,22 @@ export class TaskDispatchService {
     return taskId ? String(taskId) : null;
   }
 
+  /**
+   * Resolve the working directory for a task session.
+   * Priority: `repo` frontmatter → defaultWorkingDir setting → home dir.
+   */
+  private getWorkingDir(file: TFile): string {
+    const cache = this.app.metadataCache.getFileCache(file);
+    const fm = cache?.frontmatter;
+    const repo = fm?.['repo'];
+    if (repo && typeof repo === 'string') return repo;
+
+    const defaultDir = this.settings.taskDispatch.defaultWorkingDir;
+    if (defaultDir) return defaultDir;
+
+    return process.env.HOME ?? '/tmp';
+  }
+
   private async assembleContext(file: TFile, taskId: string): Promise<string> {
     // Read note body and strip frontmatter
     const rawContent = await this.app.vault.read(file);
@@ -297,9 +314,10 @@ export class TaskDispatchService {
     tmux: string,
     sessionName: string,
     agentConfig: AgentConfig,
-    contextFilePath: string
+    contextFilePath: string,
+    workingDir: string
   ): Promise<void> {
-    await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)}`);
+    await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)}`);
 
     const agentCommand = `${agentConfig.command} ${agentConfig.contextFlag} ${this.shellEscape(contextFilePath)}`;
     await execAsync(
