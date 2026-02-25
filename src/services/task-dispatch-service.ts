@@ -327,6 +327,9 @@ export class TaskDispatchService {
     contextFilePath: string,
     workingDir: string
   ): Promise<void> {
+    // Ensure the working directory exists before launching the session.
+    await fs.promises.mkdir(workingDir, { recursive: true });
+
     // Create session with a normal login shell so the user's PATH is available.
     await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)}`);
 
@@ -334,10 +337,14 @@ export class TaskDispatchService {
     // Without this, send-keys can fire before the shell is ready and characters get lost.
     await this.waitForShellReady(tmux, sessionName);
 
-    // --append-system-prompt works in interactive mode (unlike
-    // --append-system-prompt-file which is print-mode only).
-    // $(cat ...) is expanded by the login shell inside tmux.
-    const agentCmd = `${agentConfig.command} ${agentConfig.contextFlag} "$(cat ${this.shellEscape(contextFilePath)})" "Read the task above and begin. Summarize what you understand, then start working."`;
+    // If the flag expects a file path (e.g. --append-system-prompt-file), pass the path directly.
+    // Otherwise (e.g. --append-system-prompt), expand the file content inline via $(cat ...).
+    const contextArg = agentConfig.contextFlag.endsWith('-file')
+      ? this.shellEscape(contextFilePath)
+      : `"$(cat ${this.shellEscape(contextFilePath)})"`;
+    // Explicit cd ensures Claude picks up the correct workspace, even if the
+    // user's shell profile overrides the tmux -c starting directory.
+    const agentCmd = `cd ${this.shellEscape(workingDir)} && ${agentConfig.command} ${agentConfig.contextFlag} ${contextArg} "Read the task above and begin. Summarize what you understand, then start working."`;
     await execAsync(
       `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCmd)} Enter`
     );
