@@ -22,3 +22,7 @@ data.json
 .DS_Store
 
 *.env
+
+# Test output artifacts
+tests/vault-output/
+PLAN.md
