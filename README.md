@@ -1,7 +1,7 @@
 # OpenAugi
 ## The Personal Intelligence Layer for Your Agents
 
-OpenAugi is a context engineering layer and personal agent harness for Obsidian. It sits between your knowledge and your AI agents — gathering the right context, dispatching tasks, and shortcutting the loop from idea to action.
+OpenAugi is a context engineering layer and personal agent harness for your data (currently as an Obsidian plugin). It sits between your knowledge and your AI agents — gathering the right context, dispatching tasks, and shortcutting the loop from idea to action.
 
 Your vault is full of plans, decisions, research, and context. OpenAugi makes that context available to agents so they can actually do useful work.
 
