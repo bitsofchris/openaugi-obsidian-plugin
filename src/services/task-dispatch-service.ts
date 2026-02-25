@@ -327,16 +327,19 @@ export class TaskDispatchService {
     contextFilePath: string,
     workingDir: string
   ): Promise<void> {
-    // Build the agent command that reads context from the temp file.
-    // --append-system-prompt works in interactive mode (unlike --append-system-prompt-file
-    // which is print-mode only). $(cat ...) is expanded by the shell inside tmux.
-    const agentCmd = `${agentConfig.command} ${agentConfig.contextFlag} "$(cat ${this.shellEscape(contextFilePath)})" "Read the task above and begin. Summarize what you understand, then start working."`;
+    // Create session with a normal login shell so the user's PATH is available.
+    await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)}`);
 
-    // Pass the command directly to new-session so it runs as the initial shell
-    // command. This avoids the race condition where send-keys fires before the
-    // shell is ready (which swallows the first character).
+    // Wait for the shell prompt to appear before sending keys.
+    // Without this, send-keys can fire before the shell is ready and characters get lost.
+    await this.waitForShellReady(tmux, sessionName);
+
+    // --append-system-prompt works in interactive mode (unlike
+    // --append-system-prompt-file which is print-mode only).
+    // $(cat ...) is expanded by the login shell inside tmux.
+    const agentCmd = `${agentConfig.command} ${agentConfig.contextFlag} "$(cat ${this.shellEscape(contextFilePath)})" "Read the task above and begin. Summarize what you understand, then start working."`;
     await execAsync(
-      `${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)} ${this.shellEscape(agentCmd)}`
+      `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCmd)} Enter`
     );
   }
 
@@ -356,6 +359,26 @@ export class TaskDispatchService {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Poll the tmux pane until the shell has printed something (i.e. the prompt),
+   * indicating it's ready to receive input.
+   */
+  private async waitForShellReady(tmux: string, sessionName: string, maxAttempts = 10): Promise<void> {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      try {
+        const { stdout } = await execAsync(
+          `${tmux} capture-pane -t ${this.shellEscape(sessionName)} -p`
+        );
+        // Once the pane has any non-empty content, the shell prompt is up.
+        if (stdout.trim().length > 0) return;
+      } catch {
+        // Session not ready yet, keep waiting
+      }
+    }
+    // If we exhausted attempts, proceed anyway — better than hanging forever.
   }
 
   private shellEscape(str: string): string {
