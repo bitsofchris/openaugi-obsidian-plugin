@@ -4,14 +4,17 @@ import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
 import { DistillService } from './services/distill-service';
 import { ContextGatheringService } from './services/context-gathering-service';
+import { TaskDispatchService } from './services/task-dispatch-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
+import { SessionListModal } from './ui/session-list-modal';
 import { sanitizeFilename, createFileWithCollisionHandling } from './utils/filename-utils';
 import { PromptSelectionModal, PromptSelectionConfig } from './ui/prompt-selection-modal';
 import { ContextGatheringModal } from './ui/context-gathering-modal';
 import { ContextSelectionModal } from './ui/context-selection-modal';
 import { ContextPreviewModal } from './ui/context-preview-modal';
 import { CommandOptions, ContextGatheringConfig, GatheredContext, DiscoveredNote } from './types/context';
+import { TaskSession } from './types/task-dispatch';
 
 /**
  * A simple tokeinzer to estimate the number of tokens
@@ -29,6 +32,7 @@ export default class OpenAugiPlugin extends Plugin {
   fileService: FileService;
   distillService: DistillService;
   contextGatheringService: ContextGatheringService;
+  taskDispatchService: TaskDispatchService;
   loadingIndicator: LoadingIndicator;
 
   async onload() {
@@ -112,6 +116,53 @@ export default class OpenAugiPlugin extends Plugin {
       }
     });
 
+    // Task dispatch commands
+    this.addCommand({
+      id: 'task-dispatch-launch',
+      name: 'Task dispatch: Launch or attach',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile && activeFile.extension === 'md') {
+          await this.taskDispatchService.launchOrAttach(activeFile);
+        } else {
+          new Notice('Please open a task note first');
+        }
+      }
+    });
+
+    this.addCommand({
+      id: 'task-dispatch-kill',
+      name: 'Task dispatch: Kill session',
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile && activeFile.extension === 'md') {
+          await this.taskDispatchService.killSession(activeFile);
+        } else {
+          new Notice('Please open a task note first');
+        }
+      }
+    });
+
+    this.addCommand({
+      id: 'task-dispatch-list',
+      name: 'Task dispatch: List active sessions',
+      callback: async () => {
+        const sessions = await this.taskDispatchService.listActiveSessions();
+        const modal = new SessionListModal(
+          this.app,
+          sessions,
+          async (session: TaskSession) => {
+            await this.taskDispatchService.openTerminal(session.tmuxSessionName);
+          },
+          async (session: TaskSession) => {
+            await this.taskDispatchService.killSessionById(session.taskId);
+            new Notice(`Killed session: ${session.taskId}`);
+          }
+        );
+        modal.open();
+      }
+    });
+
     // Add settings tab
     this.addSettingTab(new OpenAugiSettingTab(this.app, this));
   }
@@ -143,6 +194,11 @@ export default class OpenAugiPlugin extends Plugin {
       this.app,
       this.distillService,
       this.settings
+    );
+    this.taskDispatchService = new TaskDispatchService(
+      this.app,
+      this.settings,
+      this.distillService
     );
   }
 
@@ -332,6 +388,13 @@ export default class OpenAugiPlugin extends Plugin {
         {},
         DEFAULT_SETTINGS.recentActivityDefaults,
         savedData.recentActivityDefaults
+      );
+    }
+    if (savedData?.taskDispatch) {
+      this.settings.taskDispatch = Object.assign(
+        {},
+        DEFAULT_SETTINGS.taskDispatch,
+        savedData.taskDispatch
       );
     }
   }

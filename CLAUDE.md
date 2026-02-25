@@ -49,16 +49,22 @@ Read the docs/CODEBASE_MAP.md to understand the project at a high level. Be sure
 ## Development Guidelines
 
 ### Build Commands
+
+**Important:** `npm` is not on the default PATH in this environment. Source nvm first:
+```bash
+export PATH="$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node/ | head -1)/bin:$PATH"
+```
+
+Then run commands as normal:
 ```bash
 # Development build with hot reload
 npm run dev
 
-# Production build
+# Production build (includes typecheck)
 npm run build
-
-# Type checking
-npm run typecheck
 ```
+
+There is no standalone `typecheck` script — `npm run build` runs `tsc -noEmit -skipLibCheck` before bundling.
 
 ### Code Standards
 - TypeScript with strict mode enabled

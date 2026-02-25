@@ -13,7 +13,10 @@ A comprehensive reference for navigating and extending this Obsidian plugin.
 | Link traversal & aggregation | [services/distill-service.ts](../src/services/distill-service.ts) |
 | Unified context discovery | [services/context-gathering-service.ts](../src/services/context-gathering-service.ts) |
 | Settings UI | [ui/settings-tab.ts](../src/ui/settings-tab.ts) |
+| Task dispatch service | [services/task-dispatch-service.ts](../src/services/task-dispatch-service.ts) |
+| Task dispatch types | [types/task-dispatch.ts](../src/types/task-dispatch.ts) |
 | Context modals | [ui/context-gathering-modal.ts](../src/ui/context-gathering-modal.ts), [ui/context-selection-modal.ts](../src/ui/context-selection-modal.ts), [ui/context-preview-modal.ts](../src/ui/context-preview-modal.ts) |
+| Session list modal | [ui/session-list-modal.ts](../src/ui/session-list-modal.ts) |
 
 ---
 
@@ -31,7 +34,14 @@ src/
 │   ├── openai-service.ts                # OpenAI API calls
 │   ├── file-service.ts                  # File creation & output
 │   ├── distill-service.ts               # Content aggregation, link traversal
-│   └── context-gathering-service.ts     # Unified discovery orchestration
+│   ├── context-gathering-service.ts     # Unified discovery orchestration
+│   └── task-dispatch-service.ts         # tmux session & agent dispatch
+├── types/
+│   ├── plugin.ts                        # Plugin interface
+│   ├── settings.ts                      # Settings interfaces & defaults
+│   ├── context.ts                       # Context gathering types
+│   ├── transcript.ts                    # API response types
+│   └── task-dispatch.ts                 # Task dispatch types (agents, sessions, frontmatter)
 ├── ui/
 │   ├── settings-tab.ts                  # Settings panel
 │   ├── loading-indicator.ts             # Status bar spinner
@@ -39,6 +49,7 @@ src/
 │   ├── context-selection-modal.ts       # Stage 2: Checkbox selection
 │   ├── context-preview-modal.ts         # Stage 3: Preview & action
 │   ├── prompt-selection-modal.ts        # Custom prompt picker
+│   ├── session-list-modal.ts            # Task dispatch session list
 │   └── recent-activity-modal.ts         # (Legacy)
 └── utils/
     └── filename-utils.ts                # Sanitization, backlink mapping
@@ -148,6 +159,35 @@ gatherContext(config: ContextGatheringConfig): Promise<GatheredContext>
 
 ---
 
+### TaskDispatchService (`task-dispatch-service.ts`)
+
+Manages tmux-based agent sessions dispatched from task notes.
+
+**Key Methods:**
+- `launchOrAttach(file)` - If tmux session exists, attach; otherwise assemble context, create session, start agent
+- `killSession(file)` - Kill tmux session for the given task note, update frontmatter
+- `listActiveSessions()` - List all `task-*` tmux sessions
+- `killSessionById(taskId)` - Kill session by ID (from session list modal)
+- `openTerminal(sessionName)` - Open terminal app attached to tmux session
+
+**Context Assembly:**
+- Reads task note body (strips frontmatter)
+- Gets linked notes via `DistillService.getLinkedNotes()`
+- Aggregates via `DistillService.aggregateContent()`
+- Writes to temp file at `/tmp/openaugi/task-{id}-context.md`
+- Context injected into agent via `--append-system-prompt-file` (Claude Code)
+
+**Frontmatter:**
+- Reads `task_id`, `agent`, `status` via `metadataCache.getFileCache()`
+- Updates `session_active`, `last_session` via `fileManager.processFrontMatter()`
+
+**Shell Execution:**
+- Uses Node.js `child_process.exec` (available via Electron)
+- tmux commands: `has-session`, `new-session`, `send-keys`, `kill-session`, `list-sessions`
+- Terminal opening: `osascript` for iTerm2 or Terminal.app
+
+---
+
 ## Types Reference
 
 ### Settings (`types/settings.ts`)
@@ -248,6 +288,9 @@ Commands are registered in `main.ts`:
 | `openaugi-process-notes` | Process notes | Unified flow: linked notes |
 | `openaugi-process-recent` | Process recent activity | Unified flow: recent activity |
 | `openaugi-save-context` | Save context | Save raw aggregated content |
+| `task-dispatch-launch` | Task dispatch: Launch or attach | Launch or attach to agent tmux session |
+| `task-dispatch-kill` | Task dispatch: Kill session | Kill active tmux session for task note |
+| `task-dispatch-list` | Task dispatch: List active sessions | Show modal of all active task sessions |
 
 ---
 

@@ -1,4 +1,5 @@
 import { App } from 'obsidian';
+import { TaskDispatchSettings } from './task-dispatch';
 
 export interface RecentActivitySettings {
   daysBack: number;
@@ -28,6 +29,7 @@ export interface OpenAugiSettings {
   enableDistillLogging: boolean;
   recentActivityDefaults: RecentActivitySettings;
   contextGatheringDefaults: ContextGatheringDefaults;
+  taskDispatch: TaskDispatchSettings;
 }
 
 export const DEFAULT_SETTINGS: OpenAugiSettings = {
@@ -53,5 +55,19 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
     filterRecentSectionsOnly: true,
     includeBacklinks: true,
     backlinkContextLines: 0
+  },
+  taskDispatch: {
+    terminalApp: 'iterm2',
+    agents: [
+      {
+        id: 'claude-code',
+        name: 'Claude Code',
+        command: 'claude',
+        contextFlag: '--append-system-prompt-file'
+      }
+    ],
+    defaultAgent: 'claude-code',
+    contextTempDir: '/tmp/openaugi',
+    maxContextChars: 200000
   }
 }; 

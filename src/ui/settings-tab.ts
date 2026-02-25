@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Notice, DropdownComponent } from 'obsidian';
 import type OpenAugiPlugin from '../types/plugin';
 import { OpenAIService } from '../services/openai-service';
+import { TerminalApp } from '../types/task-dispatch';
 
 export class OpenAugiSettingTab extends PluginSettingTab {
   plugin: OpenAugiPlugin;
@@ -349,6 +350,68 @@ export class OpenAugiSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         })
       );
+
+    // Task Dispatch Settings Header
+    containerEl.createEl('h3', { text: 'Task Dispatch' });
+
+    new Setting(containerEl)
+      .setName('Terminal application')
+      .setDesc('Which terminal app to open for agent sessions')
+      .addDropdown(dropdown => dropdown
+        .addOption('iterm2', 'iTerm2')
+        .addOption('terminal-app', 'Terminal.app')
+        .setValue(this.plugin.settings.taskDispatch.terminalApp)
+        .onChange(async (value) => {
+          this.plugin.settings.taskDispatch.terminalApp = value as TerminalApp;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Default agent')
+      .setDesc('Agent to use when task note does not specify one')
+      .addDropdown(dropdown => {
+        for (const agent of this.plugin.settings.taskDispatch.agents) {
+          dropdown.addOption(agent.id, agent.name);
+        }
+        dropdown.setValue(this.plugin.settings.taskDispatch.defaultAgent);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.taskDispatch.defaultAgent = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName('Max context characters')
+      .setDesc('Maximum characters to include in the context bundle sent to the agent')
+      .addText(text => text
+        .setPlaceholder('200000')
+        .setValue(String(this.plugin.settings.taskDispatch.maxContextChars))
+        .onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num > 0) {
+            this.plugin.settings.taskDispatch.maxContextChars = num;
+            await this.plugin.saveSettings();
+          }
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Context temp directory')
+      .setDesc('Directory for temporary context files passed to agents')
+      .addText(text => {
+        text
+          .setPlaceholder('/tmp/openaugi')
+          .setValue(this.plugin.settings.taskDispatch.contextTempDir);
+        text.inputEl.addEventListener('blur', async () => {
+          const value = text.getValue();
+          if (value !== this.plugin.settings.taskDispatch.contextTempDir) {
+            this.plugin.settings.taskDispatch.contextTempDir = value;
+            await this.plugin.saveSettings();
+          }
+        });
+        return text;
+      });
 
     // Advanced Settings Header
     containerEl.createEl('h3', { text: 'Advanced Settings' });
