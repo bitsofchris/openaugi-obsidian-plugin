@@ -401,7 +401,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Default working directory')
-      .setDesc('Directory the agent launches in. Override per-task with `repo` in frontmatter.')
+      .setDesc('Directory the agent launches in. Vault-relative or absolute. Override per-task with `working_dir` in frontmatter.')
       .addText(text => {
         text
           .setPlaceholder('~/projects')

@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS: OpenAugiSettings = {
         id: 'claude-code',
         name: 'Claude Code',
         command: 'claude',
-        contextFlag: '--append-system-prompt-file'
+        contextFlag: '--append-system-prompt'
       }
     ],
     defaultAgent: 'claude-code',

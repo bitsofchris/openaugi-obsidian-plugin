@@ -298,16 +298,19 @@ export class TaskDispatchService {
   }
 
   private cleanupContextFile(taskId: string): void {
-    const filePath = path.join(
-      this.settings.taskDispatch.contextTempDir,
-      `task-${taskId}-context.md`
-    );
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    const dir = this.settings.taskDispatch.contextTempDir;
+    const files = [
+      path.join(dir, `task-${taskId}-context.md`),
+      path.join(dir, `task-${taskId}-launch.sh`),
+    ];
+    for (const filePath of files) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        // Non-critical, ignore cleanup failures
       }
-    } catch {
-      // Non-critical, ignore cleanup failures
     }
   }
 
@@ -329,9 +332,19 @@ export class TaskDispatchService {
   ): Promise<void> {
     await execAsync(`${tmux} new-session -d -s ${this.shellEscape(sessionName)} -c ${this.shellEscape(workingDir)}`);
 
-    const agentCommand = `${agentConfig.command} ${agentConfig.contextFlag} ${this.shellEscape(contextFilePath)}`;
+    // Write a launcher script that reads context from the temp file and passes
+    // it to the agent via --append-system-prompt (which works in interactive mode,
+    // unlike --append-system-prompt-file which is print-mode only).
+    // This avoids piping potentially 200k+ chars through tmux send-keys.
+    const launcherPath = contextFilePath.replace('-context.md', '-launch.sh');
+    const launcherScript = [
+      '#!/bin/bash',
+      `${agentConfig.command} ${agentConfig.contextFlag} "$(cat "${contextFilePath}")" "Read the task above and begin. Summarize what you understand, then start working."`,
+    ].join('\n');
+    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o755 });
+
     await execAsync(
-      `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(agentCommand)} Enter`
+      `${tmux} send-keys -t ${this.shellEscape(sessionName)} ${this.shellEscape(launcherPath)} Enter`
     );
   }
 
