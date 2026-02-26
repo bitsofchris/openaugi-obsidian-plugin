@@ -72,5 +72,11 @@ export class FileSystemAdapter {
   getBasePath(): string { return this.basePath; }
 }
 
+export const Platform = {
+  isMobile: false,
+  isDesktop: true,
+  isDesktopApp: true,
+};
+
 export class MarkdownView {}
 export class WorkspaceLeaf {}

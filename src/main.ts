@@ -1,10 +1,12 @@
-import { Plugin, Notice, TFile } from 'obsidian';
+import { Plugin, Notice, TFile, Platform } from 'obsidian';
 import { OpenAugiSettings, DEFAULT_SETTINGS } from './types/settings';
 import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
 import { DistillService } from './services/distill-service';
 import { ContextGatheringService } from './services/context-gathering-service';
-import { TaskDispatchService } from './services/task-dispatch-service';
+// Lazy-imported: TaskDispatchService uses Node.js modules (child_process, fs, path)
+// that are unavailable on mobile. We dynamic-import it only on desktop.
+import type { TaskDispatchService } from './services/task-dispatch-service';
 import { OpenAugiSettingTab } from './ui/settings-tab';
 import { LoadingIndicator } from './ui/loading-indicator';
 import { SessionListModal } from './ui/session-list-modal';
@@ -32,7 +34,7 @@ export default class OpenAugiPlugin extends Plugin {
   fileService: FileService;
   distillService: DistillService;
   contextGatheringService: ContextGatheringService;
-  taskDispatchService: TaskDispatchService;
+  taskDispatchService: TaskDispatchService | null;
   loadingIndicator: LoadingIndicator;
 
   async onload() {
@@ -116,52 +118,66 @@ export default class OpenAugiPlugin extends Plugin {
       }
     });
 
-    // Task dispatch commands
-    this.addCommand({
-      id: 'task-dispatch-launch',
-      name: 'Task dispatch: Launch or attach',
-      callback: async () => {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile && activeFile.extension === 'md') {
-          await this.taskDispatchService.launchOrAttach(activeFile);
-        } else {
-          new Notice('Please open a task note first');
-        }
-      }
-    });
-
-    this.addCommand({
-      id: 'task-dispatch-kill',
-      name: 'Task dispatch: Kill session',
-      callback: async () => {
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile && activeFile.extension === 'md') {
-          await this.taskDispatchService.killSession(activeFile);
-        } else {
-          new Notice('Please open a task note first');
-        }
-      }
-    });
-
-    this.addCommand({
-      id: 'task-dispatch-list',
-      name: 'Task dispatch: List active sessions',
-      callback: async () => {
-        const sessions = await this.taskDispatchService.listActiveSessions();
-        const modal = new SessionListModal(
-          this.app,
-          sessions,
-          async (session: TaskSession) => {
-            await this.taskDispatchService.openTerminal(session.tmuxSessionName);
-          },
-          async (session: TaskSession) => {
-            await this.taskDispatchService.killSessionById(session.taskId);
-            new Notice(`Killed session: ${session.taskId}`);
+    // Task dispatch commands — desktop only
+    if (!Platform.isMobile) {
+      this.addCommand({
+        id: 'task-dispatch-launch',
+        name: 'Task dispatch: Launch or attach',
+        callback: async () => {
+          if (!this.taskDispatchService) {
+            new Notice('Task dispatch is still loading, try again in a moment');
+            return;
           }
-        );
-        modal.open();
-      }
-    });
+          const activeFile = this.app.workspace.getActiveFile();
+          if (activeFile && activeFile.extension === 'md') {
+            await this.taskDispatchService.launchOrAttach(activeFile);
+          } else {
+            new Notice('Please open a task note first');
+          }
+        }
+      });
+
+      this.addCommand({
+        id: 'task-dispatch-kill',
+        name: 'Task dispatch: Kill session',
+        callback: async () => {
+          if (!this.taskDispatchService) {
+            new Notice('Task dispatch is still loading, try again in a moment');
+            return;
+          }
+          const activeFile = this.app.workspace.getActiveFile();
+          if (activeFile && activeFile.extension === 'md') {
+            await this.taskDispatchService.killSession(activeFile);
+          } else {
+            new Notice('Please open a task note first');
+          }
+        }
+      });
+
+      this.addCommand({
+        id: 'task-dispatch-list',
+        name: 'Task dispatch: List active sessions',
+        callback: async () => {
+          if (!this.taskDispatchService) {
+            new Notice('Task dispatch is still loading, try again in a moment');
+            return;
+          }
+          const sessions = await this.taskDispatchService.listActiveSessions();
+          const modal = new SessionListModal(
+            this.app,
+            sessions,
+            async (session: TaskSession) => {
+              await this.taskDispatchService!.openTerminal(session.tmuxSessionName);
+            },
+            async (session: TaskSession) => {
+              await this.taskDispatchService!.killSessionById(session.taskId);
+              new Notice(`Killed session: ${session.taskId}`);
+            }
+          );
+          modal.open();
+        }
+      });
+    }
 
     // Add settings tab
     this.addSettingTab(new OpenAugiSettingTab(this.app, this));
@@ -195,11 +211,23 @@ export default class OpenAugiPlugin extends Plugin {
       this.distillService,
       this.settings
     );
-    this.taskDispatchService = new TaskDispatchService(
-      this.app,
-      this.settings,
-      this.distillService
-    );
+
+    // TaskDispatchService uses Node.js modules (child_process, fs, path)
+    // unavailable on mobile. Skip entirely on mobile.
+    this.taskDispatchService = null;
+    if (!Platform.isMobile) {
+      import('./services/task-dispatch-service')
+        .then(({ TaskDispatchService }) => {
+          this.taskDispatchService = new TaskDispatchService(
+            this.app,
+            this.settings,
+            this.distillService
+          );
+        })
+        .catch(() => {
+          // Fallback: Node.js modules unavailable in this environment.
+        });
+    }
   }
 
   /**

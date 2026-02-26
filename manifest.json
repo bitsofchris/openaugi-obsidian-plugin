@@ -1,7 +1,7 @@
 {
 	"id": "openaugi",
 	"name": "OpenAugi",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"minAppVersion": "1.8.9",
 	"description": "Process information faster with augmented intelligence (AI for thinkers). Parse your voice notes into atomic notes, tasks, and summaries. Grab context from dataview queries and linked notes. De-duplicate and merge atomic ideas into a clean, organized vault.",
 	"author": "Chris Lettieri",

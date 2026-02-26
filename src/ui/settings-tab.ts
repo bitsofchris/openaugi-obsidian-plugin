@@ -2,7 +2,8 @@ import { App, PluginSettingTab, Setting, Notice, DropdownComponent } from 'obsid
 import type OpenAugiPlugin from '../types/plugin';
 import { OpenAIService } from '../services/openai-service';
 import { TerminalApp } from '../types/task-dispatch';
-import { detectTmuxPath } from '../services/task-dispatch-service';
+// Lazy-imported: detectTmuxPath lives in task-dispatch-service which uses
+// Node.js modules unavailable on mobile.
 
 export class OpenAugiSettingTab extends PluginSettingTab {
   plugin: OpenAugiPlugin;
@@ -387,6 +388,7 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       .addButton(button => button
         .setButtonText('Detect')
         .onClick(async () => {
+          const { detectTmuxPath } = await import('../services/task-dispatch-service');
           const found = await detectTmuxPath();
           if (found) {
             this.plugin.settings.taskDispatch.tmuxPath = found;
