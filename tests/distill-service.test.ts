@@ -167,11 +167,19 @@ describe('DistillService', () => {
     });
 
     it('filters content by date range', () => {
-      const content = '# Daily Journal\n\n### 2026-02-25\nRecent entry\n\n### 2025-01-01\nVery old entry';
-      const filtered = (service as any).extractContentByDateRange(content, 30);
+      // Pin "now" so the fixed fixture dates are deterministic regardless of the
+      // real current date. extractContentByDateRange uses new Date() as "now".
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-02-28T12:00:00Z'));
+      try {
+        const content = '# Daily Journal\n\n### 2026-02-25\nRecent entry\n\n### 2025-01-01\nVery old entry';
+        const filtered = (service as any).extractContentByDateRange(content, 30);
 
-      expect(filtered).toContain('Recent entry');
-      expect(filtered).not.toContain('Very old entry');
+        expect(filtered).toContain('Recent entry');
+        expect(filtered).not.toContain('Very old entry');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
