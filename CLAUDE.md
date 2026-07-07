@@ -138,16 +138,19 @@ Tests cover: filename utils, OpenAI prompt building, link extraction, BFS traver
 - Enable verbose logging in development
 
 ### Publishing
-See [docs/PUBLISHING.md](docs/PUBLISHING.md) for the complete release process.
+See [docs/PUBLISHING.md](docs/PUBLISHING.md) for the complete release process,
+including community-store listing health and how to relist if de-listed.
 
-**Quick summary:**
-1. Update version in `manifest.json` and `package.json`
-2. Commit and push to master
-3. Tag with matching version: `git tag -a X.Y.Z -m "X.Y.Z" && git push origin X.Y.Z`
-4. Generate release notes (Claude: compare commits since last tag, focus on user-facing changes)
-5. Edit draft release on GitHub and publish
+**Just run the script** (it bumps all three version files, publishes, and verifies):
+```bash
+# write docs/release-notes/X.Y.Z.md first, then:
+./scripts/release.sh X.Y.Z
+```
 
-*** Be sure to update `manifest.json` version number as part of PR ***
+**Non-negotiables** (the guard test `tests/version-consistency.test.ts` enforces these):
+- Bump **all THREE** version files together: `manifest.json`, `package.json`, **and `versions.json`** (add `"X.Y.Z": "<minAppVersion>"`). Forgetting `versions.json` is the classic mistake.
+- Tag == `manifest.version`, no `v` prefix.
+- **Publish the draft immediately** after CI — never leave the repo advertising a version with no published release (that inconsistency can get the plugin auto-removed from the store).
 
 ## Important Considerations
 

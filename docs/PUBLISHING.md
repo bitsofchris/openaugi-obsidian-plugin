@@ -1,149 +1,170 @@
 # Publishing a New Release
 
-This guide walks through the complete process of publishing a new OpenAugi plugin release.
+**name:** publish-release
+**description:** How to cut and publish a new OpenAugi plugin version safely, keep it consistent with the Obsidian community store, and what to do if the plugin gets de-listed.
+**when to use:** Any time you ship a new version of the plugin (features, fixes) or need to relist it in the community store.
 
-## Pre-Release Checklist
+---
 
-Before starting the release process:
-
-- [ ] All features/fixes are merged to master
-- [ ] **Automated tests pass** (`npm test`) — see [TESTING.md](TESTING.md)
-- [ ] New features have test coverage (add to `tests/`)
-- [ ] Code builds without errors (`npm run build`)
-- [ ] Type checking passes (`npm run typecheck`)
-- [ ] Manual testing completed in test vault (`/Users/chris/zk-for-testing`)
-- [ ] CODEBASE_MAP.md is up to date with any architectural changes
-
-## Release Process
-
-### Step 1: Bump the Version
-
-Update the version number in **both** files (they must match):
-
-1. `manifest.json` - Update the `"version"` field
-2. `package.json` - Update the `"version"` field
-
-Use semantic versioning:
-- **MAJOR** (1.0.0): Breaking changes
-- **MINOR** (0.1.0): New features, backwards compatible
-- **PATCH** (0.0.1): Bug fixes, backwards compatible
-
-### Step 2: Commit the Version Bump
+## TL;DR — use the script
 
 ```bash
-git add manifest.json package.json
-git commit -m "Bump version to X.Y.Z"
-git push origin master
+# 1. Write the release notes first (they become the GitHub release body):
+#      docs/release-notes/X.Y.Z.md
+# 2. Then run:
+./scripts/release.sh X.Y.Z
 ```
 
-### Step 3: Create and Push the Git Tag
+`release.sh` does the whole thing and **verifies it**: checks preconditions →
+runs tests + build → bumps `manifest.json`, `package.json`, **and
+`versions.json`** in lockstep → commits, pushes, tags → waits for CI → **publishes
+the draft immediately** → verifies that the repo-root manifest, the released
+manifest asset, and the tag all equal `X.Y.Z`. It stops loudly on any mismatch.
 
-The tag **must** match the version in `manifest.json` exactly.
+Everything below explains *why* it does what it does, and the manual fallback.
 
-```bash
-git tag -a X.Y.Z -m "X.Y.Z"
-git push origin X.Y.Z
-```
+## The three things Obsidian actually checks
 
-Notes:
-- `-a` creates an [annotated tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging#_creating_tags) (required for Obsidian releases)
-- `-m` specifies the tag message - must match the version number
+1. **`manifest.json` at the repo-root HEAD** — Obsidian reads only the `version`
+   field here to decide "what's the latest version."
+2. **A GitHub release whose tag == that version** (no `v` prefix), with
+   `main.js`, `manifest.json`, and `styles.css` attached as assets. Obsidian
+   downloads the files from the *release*, not from the repo tree.
+3. **`versions.json`** — maps each plugin version → minimum Obsidian version.
+   Used to decide whether a given user's Obsidian is new enough to be offered the
+   update.
 
-### Step 4: Wait for GitHub Actions
+If the root manifest advertises a version that has **no matching published
+release**, the plugin is in an inconsistent state — and Obsidian's automated
+validation can drop it from the store. Never leave that window open. (This is
+what bit us on 0.6.0.)
 
-The workflow will automatically:
-1. Build the plugin
-2. Create a draft release with the built artifacts
+## Version files — all THREE must move together
 
-Monitor progress at: https://github.com/bitsofchris/openaugi-obsidian-plugin/actions
+| File | Field | Notes |
+|------|-------|-------|
+| `manifest.json` | `version` | source of truth for the release tag |
+| `package.json`  | `version` | keep in sync (npm/build hygiene) |
+| `versions.json` | add `"X.Y.Z": "<minAppVersion>"` | **easy to forget — it's why updates/relisting break** |
 
-### Step 5: Generate Release Notes
+The `tests/version-consistency.test.ts` guard test fails the build if these ever
+disagree. `npm test` therefore catches a forgotten `versions.json` bump before
+you tag.
 
-**Claude should generate release notes** by comparing the new tag to the previous release:
+> Historical note: earlier versions of this doc listed only `manifest.json` and
+> `package.json`. `versions.json` was missing entirely, which broke the
+> `npm version` script and left the store metadata incomplete. Don't regress.
 
-1. Look at all commits since the last release tag
-2. Identify user-facing changes (features, fixes, improvements)
-3. Create release notes in this format:
+## Pre-release checklist
+
+- [ ] Features/fixes merged to master; `git status` clean; local == `origin/master`
+- [ ] `npm test` passes (includes the version-consistency guard) — see [TESTING.md](TESTING.md)
+- [ ] `npm run build` clean (tsc + esbuild)
+- [ ] Manually tested in a real vault (`npm run dev`, reload plugin, exercise the change)
+- [ ] `docs/CODEBASE_MAP.md` / `README.md` updated for any behavior change
+- [ ] Release notes written to `docs/release-notes/X.Y.Z.md`
+
+## Release notes format
+
+Write `docs/release-notes/X.Y.Z.md` before releasing. Claude: diff commits since
+the previous tag and focus on user-facing changes.
 
 ```markdown
-## TL;DR
-[One-sentence summary of the most important change(s)]
+# X.Y.Z — <one-line theme>
 
-## What's New
+## Added / Changed / Fixed / Deprecated
+- <user-facing change>: <why the user cares>
 
-### Features
-- [Feature 1]: [Brief description of what it does and why users care]
-- [Feature 2]: [Brief description]
-
-### Bug Fixes
-- [Fix 1]: [What was broken and how it's fixed]
-
-### Improvements
-- [Improvement 1]: [What's better now]
-
-## How to Use
-
-[For any new features, include brief usage instructions]
-
-## Upgrade Notes
-
-[Any breaking changes or things users need to know when upgrading]
+## Notes
+- <breaking changes or upgrade steps, if any>
 ```
 
-Write this out to a markdown file.
+## Manual fallback (if you can't use the script)
 
-### Step 6: Publish the Release
-
-1. Go to https://github.com/bitsofchris/openaugi-obsidian-plugin/releases
-2. Find the draft release created by the workflow
-3. Click **Edit**
-4. Paste the generated release notes
-5. Click **Publish release**
-
-### Step 7: Update Documentation
-
-Ensure all docs reflect the new release:
-
-- [ ] `docs/CODEBASE_MAP.md` - Architecture changes
-- [ ] `CLAUDE.md` - Any new development guidelines
-- [ ] `README.md` - User-facing documentation (if applicable)
-
-## Quick Reference
+Only if `release.sh` can't run. Do the steps **in this order** and don't stop
+before publishing:
 
 ```bash
-# Full release flow (example for version 0.4.0)
-npm test
-npm run build
-npm run typecheck
+# 1. Bump ALL THREE (or run: npm version X.Y.Z  — see note below)
+#    manifest.json .version, package.json .version, versions.json add "X.Y.Z":"<minAppVersion>"
+npm test && npm run build            # guard test must be green
 
-# Commit version bump
-git add manifest.json package.json
-git commit -m "Bump version to 0.4.0"
+git add manifest.json package.json versions.json docs/release-notes/X.Y.Z.md
+git commit -m "Release X.Y.Z"
 git push origin master
 
-# Tag and push
-git tag -a 0.4.0 -m "0.4.0"
-git push origin 0.4.0
+git tag -a X.Y.Z -m "X.Y.Z"          # annotated, no 'v' prefix
+git push origin X.Y.Z                # triggers .github/workflows/release.yml → draft
 
-# Then: Edit draft release on GitHub and publish
+# 2. Wait for the workflow, then PUBLISH RIGHT AWAY (don't leave it a draft):
+gh run watch "$(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+gh release edit X.Y.Z --draft=false --latest --notes-file docs/release-notes/X.Y.Z.md
+
+# 3. Verify root manifest, released asset, and tag all say X.Y.Z:
+curl -sL https://raw.githubusercontent.com/bitsofchris/openaugi-obsidian-plugin/master/manifest.json | grep version
+curl -sL https://github.com/bitsofchris/openaugi-obsidian-plugin/releases/download/X.Y.Z/manifest.json | grep version
 ```
+
+> `npm version X.Y.Z` also works: `.npmrc` sets `tag-version-prefix=""` (so the
+> tag has no `v`), and the `version` npm script runs `version-bump.mjs` which
+> updates `manifest.json` + `versions.json`, while npm bumps `package.json`. It
+> commits and tags for you — but it does **not** push or publish, so you still
+> owe steps 1–3 above (push, wait, publish, verify). The script does all of it.
+
+## Community-store listing health
+
+The plugin is listed in Obsidian's store via
+[`obsidianmd/obsidian-releases`](https://github.com/obsidianmd/obsidian-releases).
+That repo's `community-plugins.json` is now an **automated mirror** of Obsidian's
+internal list (commits read `chore: Mirror community plugins and themes`), so you
+can't fix listing by PR'ing that file — it gets overwritten.
+
+Check whether we're currently listed:
+
+```bash
+curl -sL https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugins.json | grep -i openaugi
+```
+
+- **Listed** → core Settings → Community plugins → "Check for updates" works for users.
+- **Not listed** → core update check can't see us; users must use **BRAT** or a
+  manual install. See the relisting steps below.
+
+### If the plugin gets removed from the store
+
+This happened on **2026-07-07** (removed in mirror commit `85db6f23`, bundled with
+several unrelated plugins — an automated batch removal). The mirror commits carry
+no per-plugin reason and Obsidian doesn't file an issue on your repo, so:
+
+1. **Fix consistency first** (so a resubmit passes validation): run a clean
+   release with `release.sh` — root manifest version must equal a *published*
+   release with the three assets, `versions.json` present, `README`/`LICENSE`
+   present. (All true as of 0.6.0.)
+2. **Ask Obsidian why + request reinstatement** — don't blindly resubmit an
+   auto-removal. Post in the Obsidian Discord **`#plugin-dev`** channel (fastest;
+   plugin-review team is active there) or the forum **Developers: Plugin & API**
+   category. Cite: repo URL, removal date `2026-07-07`, mirror commit `85db6f23`.
+3. **If they tell you to resubmit:** the current path is the web portal at
+   **community.obsidian.md** → sign in with your Obsidian account → link GitHub →
+   Plugins → New plugin → enter the repo URL. (The old "PR to
+   community-plugins.json" flow is dead now that the file is bot-mirrored.)
+4. **Gotcha — "An entry already exists for this repository":** because the old
+   entry is archived rather than deleted, resubmitting the same repo URL can be
+   rejected. Ask a moderator in `#plugin-dev` to delete the archived entry, then
+   resubmit.
+
+Sources: Obsidian plugin submission docs; obsidian-releases repo (mirror
+architecture); forum thread "Cannot resubmit plugin after archiving: 'An entry
+already exists for this repository'".
 
 ## Troubleshooting
 
-### Tag already exists
+**Tag already exists / wrong version tagged**
 ```bash
-# Delete local tag
 git tag -d X.Y.Z
-# Delete remote tag (if pushed)
-git push origin --delete X.Y.Z
+git push origin --delete X.Y.Z     # if already pushed
+# fix versions, re-run ./scripts/release.sh X.Y.Z
 ```
 
-### Wrong version tagged
-1. Delete the incorrect tag (see above)
-2. Fix the version in manifest.json/package.json
-3. Commit and re-tag
+**Workflow failed** — `gh run view <id>`, fix, delete the tag, re-run the script.
 
-### Workflow failed
-1. Check the Actions tab for error details
-2. Fix the issue
-3. Delete the tag and re-push after fixing
+**Release stuck as draft** — `gh release edit X.Y.Z --draft=false --latest`.
