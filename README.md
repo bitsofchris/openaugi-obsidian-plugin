@@ -23,15 +23,18 @@ Gather precisely the right context from your vault — not too much, not too lit
 - **Character budgets** — Stay within token limits with configurable caps
 - **Checkbox review** — Toggle individual notes on/off before processing
 
-### 2. Task Dispatch
+### 2. Agent Tasks
 
-Write a task note, link your context, and launch an agent session directly from Obsidian.
+Queue work for your agents without leaving Obsidian. The **Augi** commands write task files to `OpenAugi/Tasks/` — the [OpenAugi task watcher](https://github.com/bitsofchris/openaugi) picks them up and runs an agent session for each.
 
-- **tmux sessions** — Each task gets its own persistent terminal session
-- **Context injection** — Task note body + all linked notes are assembled and passed to the agent
-- **Named repo paths** — Map short names to directories so `working_dir: my-api` just works
-- **Session management** — List, attach to, or kill running agent sessions
-- **MCP integration** — Agents can search your vault and write results back to the task note
+- **Augi: Run review pass** — Route new blocks, refresh views, surface Dashboard nominations
+- **Augi: Process dashboard** — Execute your nomination answers only
+- **Augi: Distill selection** — Distill the current selection (or active note) through the distill lens
+- **File-based trigger** — Pure vault API, no shell or HTTP, works on Obsidian Mobile with a synced vault
+
+See [Agent Tasks docs](docs/AGENT_TASKS.md).
+
+The older **Task Dispatch** feature (launching tmux sessions directly from the plugin) is deprecated in favor of the task-file flow — see [Task Dispatch docs](docs/TASK_DISPATCH.md).
 
 ### 3. Note Processing
 
@@ -50,30 +53,13 @@ Turn raw notes into organized, atomic knowledge.
 
 1. Install from Obsidian Community Plugins (or manually)
 2. Settings → OpenAugi → Enter your OpenAI API key
-3. For task dispatch: install tmux (`brew install tmux`)
+3. For agent tasks: install [OpenAugi](https://github.com/bitsofchris/openaugi) and run `openaugi up` (the task watcher)
 
-### Dispatch a Task
+### Queue an Agent Task
 
-Create a task note:
+Run **Augi: Run review pass** (or **Augi: Process dashboard**, **Augi: Distill selection**) from the command palette. The plugin writes a pending task file to `OpenAugi/Tasks/`; the task watcher launches an agent session that does the work and writes its results back into the task file.
 
-```yaml
----
-task_id: fix-auth-bug
-working_dir: my-repo
----
-```
-
-```markdown
-## Objective
-
-Fix the authentication bug where sessions expire after 5 minutes.
-
-## Context
-
-The auth middleware is in `src/middleware/auth.ts`. [[API Design Doc]] has the spec.
-```
-
-Run **Task dispatch: Launch or attach** from the command palette. A terminal opens with your agent pre-loaded with context from the note and all linked notes.
+For **Augi: Distill selection**, select the text you want distilled first — the selection (or the whole active note if nothing is selected) becomes the task's context.
 
 ### Gather Context
 
@@ -89,29 +75,34 @@ Run **Task dispatch: Launch or attach** from the command palette. A terminal ope
 
 | Command | Purpose |
 |---------|---------|
+| **Augi: Run review pass** | Queue a full review pass for the task watcher |
+| **Augi: Process dashboard** | Queue Dashboard nomination processing for the task watcher |
+| **Augi: Distill selection** | Queue a distill of the current selection or active note |
 | **Process notes** | Gather linked notes → review → distill / publish / save |
 | **Process recent activity** | Same flow but discovers by recent modification date |
 | **Save context** | Gather and save raw context (no AI processing) |
-| **Task dispatch: Launch or attach** | Launch agent session from task note |
-| **Task dispatch: Kill session** | Kill tmux session for current task note |
-| **Task dispatch: List active sessions** | View and manage all running agent sessions |
+| **Task dispatch: Launch or attach** | Deprecated — launch agent session from task note |
+| **Task dispatch: Kill session** | Deprecated — kill tmux session for current task note |
+| **Task dispatch: List active sessions** | Deprecated — view and manage running agent sessions |
 | **Parse transcript** | Process voice transcript into atomic notes |
 | **Distill linked notes** | Legacy command — use Process notes instead |
 
 ---
 
-## Task Dispatch
+## Agent Tasks
 
-Task dispatch is the agent harness. It reads a task note, assembles context from linked notes, creates a tmux session, and launches your agent CLI with everything pre-loaded.
+The Augi commands are the trigger surface for the OpenAugi agent loop. Each command writes a `status: pending` task file to `OpenAugi/Tasks/`; the task watcher (`openaugi up`) hydrates it, launches a Claude agent session, and the agent writes its results back into the same file.
 
-See [Task Dispatch docs](docs/TASK_DISPATCH.md) for the full reference.
+See [Agent Tasks docs](docs/AGENT_TASKS.md) for the full reference, including the task-file format.
 
 **Key concepts:**
-- `task_id` in frontmatter identifies the task (required)
-- `working_dir` sets where the agent runs — supports named repos, absolute paths, or vault-relative paths
-- Linked notes (`[[Design Doc]]`, `[[API Spec]]`) are automatically included in context
-- Sessions persist across Obsidian restarts — use "List active sessions" to reattach
-- Agents can use the OpenAugi MCP to search your vault and write results back
+- The vault filesystem is the API — the plugin only writes a file, so the commands work on mobile with a synced vault
+- The same contract is shared with the `openaugi review` CLI and the `zzz:` capture grammar
+- The task file doubles as the record: results and status land back in it
+
+### Task Dispatch (deprecated)
+
+The older agent harness: reads a task note, assembles context from linked notes, creates a tmux session, and launches your agent CLI directly from the plugin. Deprecated in favor of the task-file flow above; it keeps working for now but will be removed over a release or two. See [Task Dispatch docs](docs/TASK_DISPATCH.md).
 
 ---
 
@@ -146,7 +137,7 @@ Settings are in **Settings → OpenAugi**.
 - Include backlinks (default: on)
 - Journal section filtering
 
-**Task Dispatch:**
+**Task Dispatch (deprecated):**
 - Terminal app (iTerm2 or Terminal.app)
 - tmux path (auto-detected or manual)
 - Default working directory
@@ -164,8 +155,9 @@ Settings are in **Settings → OpenAugi**.
 ## Requirements
 
 - **OpenAI API key** — Required for AI processing (distill, publish, parse)
-- **tmux** — Required for task dispatch (`brew install tmux`)
-- **macOS** — Task dispatch terminal opening uses AppleScript (iTerm2 or Terminal.app)
+- **OpenAugi task watcher** — Required for the Augi agent-task commands ([openaugi](https://github.com/bitsofchris/openaugi), run `openaugi up`)
+- **tmux** — Required for deprecated task dispatch (`brew install tmux`)
+- **macOS** — Deprecated task dispatch terminal opening uses AppleScript (iTerm2 or Terminal.app)
 
 ---
 

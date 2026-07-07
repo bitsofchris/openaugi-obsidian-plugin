@@ -13,7 +13,8 @@ A comprehensive reference for navigating and extending this Obsidian plugin.
 | Link traversal & aggregation | [services/distill-service.ts](../src/services/distill-service.ts) |
 | Unified context discovery | [services/context-gathering-service.ts](../src/services/context-gathering-service.ts) |
 | Settings UI | [ui/settings-tab.ts](../src/ui/settings-tab.ts) |
-| Task dispatch service | [services/task-dispatch-service.ts](../src/services/task-dispatch-service.ts) |
+| Agent task-file writer | [services/task-file-service.ts](../src/services/task-file-service.ts) |
+| Task dispatch service (deprecated) | [services/task-dispatch-service.ts](../src/services/task-dispatch-service.ts) |
 | Task dispatch types | [types/task-dispatch.ts](../src/types/task-dispatch.ts) |
 | Context modals | [ui/context-gathering-modal.ts](../src/ui/context-gathering-modal.ts), [ui/context-selection-modal.ts](../src/ui/context-selection-modal.ts), [ui/context-preview-modal.ts](../src/ui/context-preview-modal.ts) |
 | Session list modal | [ui/session-list-modal.ts](../src/ui/session-list-modal.ts) |
@@ -35,7 +36,8 @@ src/
 │   ├── file-service.ts                  # File creation & output
 │   ├── distill-service.ts               # Content aggregation, link traversal
 │   ├── context-gathering-service.ts     # Unified discovery orchestration
-│   └── task-dispatch-service.ts         # tmux session & agent dispatch
+│   ├── task-file-service.ts             # Pending task files → OpenAugi/Tasks/ (watcher trigger)
+│   └── task-dispatch-service.ts         # tmux session & agent dispatch (deprecated)
 ├── types/
 │   ├── plugin.ts                        # Plugin interface
 │   ├── settings.ts                      # Settings interfaces & defaults
@@ -159,9 +161,26 @@ gatherContext(config: ContextGatheringConfig): Promise<GatheredContext>
 
 ---
 
-### TaskDispatchService (`task-dispatch-service.ts`)
+### TaskFileService (`task-file-service.ts`)
 
-Manages tmux-based agent sessions dispatched from task notes.
+Writes `status: pending` task files to `OpenAugi/Tasks/` via the vault API — the trigger contract consumed by the OpenAugi task watcher (`openaugi up` in the parent repo). No Node.js modules, so it works on mobile. See [AGENT_TASKS.md](AGENT_TASKS.md).
+
+**Key Methods:**
+- `createReviewPassTask()` - Queue "run the review pass"
+- `createProcessDashboardTask()` - Queue "process the dashboard"
+- `createDistillTask(context, sourceNote)` - Queue a distill of the given content (selection or note body)
+
+**Contract:**
+- File format defined in the parent repo's `src/openaugi/templates/task-template.md`
+- Frontmatter: `status: pending`, `source_block_id: obsidian-plugin`, `source_note`
+- Sections: `# title`, `## Context`, `## User instruction`, `## Task`, `## Human Todo`, `## Results`
+- No `repo`/`working_dir` key — the watcher defaults the agent to the vault
+
+---
+
+### TaskDispatchService (`task-dispatch-service.ts`) — DEPRECATED
+
+Manages tmux-based agent sessions dispatched from task notes. Deprecated: it launches tmux itself, bypassing the task watcher. Kept functional for existing users; to be removed over a release or two. Prefer `TaskFileService`.
 
 **Key Methods:**
 - `launchOrAttach(file)` - If tmux session exists, attach; otherwise assemble context, create session, start agent
@@ -288,9 +307,12 @@ Commands are registered in `main.ts`:
 | `openaugi-process-notes` | Process notes | Unified flow: linked notes |
 | `openaugi-process-recent` | Process recent activity | Unified flow: recent activity |
 | `openaugi-save-context` | Save context | Save raw aggregated content |
-| `task-dispatch-launch` | Task dispatch: Launch or attach | Launch or attach to agent tmux session |
-| `task-dispatch-kill` | Task dispatch: Kill session | Kill active tmux session for task note |
-| `task-dispatch-list` | Task dispatch: List active sessions | Show modal of all active task sessions |
+| `augi-run-review-pass` | Augi: Run review pass | Write pending task file: "run the review pass" |
+| `augi-process-dashboard` | Augi: Process dashboard | Write pending task file: "process the dashboard" |
+| `augi-distill-selection` | Augi: Distill selection | Write pending distill task for selection/active note |
+| `task-dispatch-launch` | Task dispatch: Launch or attach | Deprecated — launch or attach to agent tmux session |
+| `task-dispatch-kill` | Task dispatch: Kill session | Deprecated — kill active tmux session for task note |
+| `task-dispatch-list` | Task dispatch: List active sessions | Deprecated — show modal of all active task sessions |
 
 ---
 

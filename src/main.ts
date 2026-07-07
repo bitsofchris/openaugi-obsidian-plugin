@@ -4,6 +4,7 @@ import { OpenAIService } from './services/openai-service';
 import { FileService } from './services/file-service';
 import { DistillService } from './services/distill-service';
 import { ContextGatheringService } from './services/context-gathering-service';
+import { TaskFileService, stripFrontmatter } from './services/task-file-service';
 // Lazy-imported: TaskDispatchService uses Node.js modules (child_process, fs, path)
 // that are unavailable on mobile. We dynamic-import it only on desktop.
 import type { TaskDispatchService } from './services/task-dispatch-service';
@@ -34,6 +35,7 @@ export default class OpenAugiPlugin extends Plugin {
   fileService: FileService;
   distillService: DistillService;
   contextGatheringService: ContextGatheringService;
+  taskFileService: TaskFileService;
   taskDispatchService: TaskDispatchService | null;
   loadingIndicator: LoadingIndicator;
 
@@ -118,7 +120,37 @@ export default class OpenAugiPlugin extends Plugin {
       }
     });
 
-    // Task dispatch commands — desktop only
+    // Augi task-file commands — write a pending task to OpenAugi/Tasks/
+    // for the OpenAugi task watcher to pick up. Pure vault API, works on
+    // mobile too. These supersede the deprecated Task Dispatch commands.
+    this.addCommand({
+      id: 'augi-run-review-pass',
+      name: 'Augi: Run review pass',
+      callback: async () => {
+        await this.queueTaskFile(() => this.taskFileService.createReviewPassTask());
+      }
+    });
+
+    this.addCommand({
+      id: 'augi-process-dashboard',
+      name: 'Augi: Process dashboard',
+      callback: async () => {
+        await this.queueTaskFile(() => this.taskFileService.createProcessDashboardTask());
+      }
+    });
+
+    this.addCommand({
+      id: 'augi-distill-selection',
+      name: 'Augi: Distill selection',
+      callback: async () => {
+        await this.distillSelection();
+      }
+    });
+
+    // Task dispatch commands — desktop only.
+    // DEPRECATED: these launch tmux directly from the plugin, bypassing the
+    // task watcher. Kept working for existing users; will be removed over a
+    // release or two. New workflows should use the Augi commands above.
     if (!Platform.isMobile) {
       this.addCommand({
         id: 'task-dispatch-launch',
@@ -211,6 +243,7 @@ export default class OpenAugiPlugin extends Plugin {
       this.distillService,
       this.settings
     );
+    this.taskFileService = new TaskFileService(this.app);
 
     // TaskDispatchService uses Node.js modules (child_process, fs, path)
     // unavailable on mobile. Skip entirely on mobile.
@@ -228,6 +261,49 @@ export default class OpenAugiPlugin extends Plugin {
           // Fallback: Node.js modules unavailable in this environment.
         });
     }
+  }
+
+  /**
+   * Run a task-file writer and surface the result as a Notice.
+   * @param write Callback that writes the task file and returns its path
+   */
+  private async queueTaskFile(write: () => Promise<string>): Promise<void> {
+    try {
+      const path = await write();
+      const filename = path.split('/').pop();
+      new Notice(`Task queued: ${filename}\nThe OpenAugi task watcher will pick it up.`);
+    } catch (error) {
+      console.error('Failed to write task file:', error);
+      new Notice('Failed to write task file. Check console for details.');
+    }
+  }
+
+  /**
+   * Queue a distill task for the current selection, or the active note's
+   * body when nothing is selected. The chosen text becomes the task's
+   * ## Context section — the plugin acts as the scope selector.
+   */
+  private async distillSelection(): Promise<void> {
+    const activeFile = this.app.workspace.getActiveFile();
+    const selection = this.app.workspace.activeEditor?.editor?.getSelection()?.trim() ?? '';
+
+    let context = selection;
+    if (!context) {
+      if (!activeFile || activeFile.extension !== 'md') {
+        new Notice('Select text or open a markdown note to distill');
+        return;
+      }
+      const raw = await this.app.vault.read(activeFile);
+      context = stripFrontmatter(raw).trim();
+    }
+
+    if (!context) {
+      new Notice('Nothing to distill — the note is empty');
+      return;
+    }
+
+    const sourceNote = activeFile?.basename ?? 'OpenAugi plugin';
+    await this.queueTaskFile(() => this.taskFileService.createDistillTask(context, sourceNote));
   }
 
   /**

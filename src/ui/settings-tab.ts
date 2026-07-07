@@ -354,7 +354,15 @@ export class OpenAugiSettingTab extends PluginSettingTab {
       );
 
     // Task Dispatch Settings Header
-    containerEl.createEl('h3', { text: 'Task Dispatch' });
+    containerEl.createEl('h3', { text: 'Task Dispatch (deprecated)' });
+    containerEl.createEl('p', {
+      text: 'Task Dispatch launches tmux sessions directly from the plugin and is '
+        + 'deprecated — it will be removed in a future release. Prefer the '
+        + '"Augi" commands (Run review pass, Process dashboard, Distill selection), '
+        + 'which write task files to OpenAugi/Tasks/ for the OpenAugi task watcher '
+        + 'to execute. The settings below only affect the legacy Task dispatch commands.',
+      cls: 'setting-item-description'
+    });
 
     new Setting(containerEl)
       .setName('Terminal application')

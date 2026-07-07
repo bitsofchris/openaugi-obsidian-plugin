@@ -1,5 +1,16 @@
 # Task Dispatch
 
+> **⚠️ Deprecated.** Task Dispatch launches tmux sessions directly from the
+> plugin — a parallel execution path that bypasses the OpenAugi task
+> watcher and will drift from it (different session names, duplicate repo
+> settings). It still works, but it will be removed over a release or two.
+> New workflows should use the **Augi commands** ([Agent Tasks](AGENT_TASKS.md)),
+> which write task files to `OpenAugi/Tasks/` for the task watcher to
+> execute — no tmux or macOS dependency in the plugin, and they work on
+> mobile. If you rely on Task Dispatch without the Python watcher, nothing
+> breaks today; plan to install [OpenAugi](https://github.com/bitsofchris/openaugi)
+> and run `openaugi up` before it is removed.
+
 Task Dispatch lets you launch AI coding agents directly from Obsidian task notes. Each task gets its own tmux session with full context from your vault — the task note body, all linked notes, and access to the OpenAugi MCP server for searching your vault.
 
 ## Prerequisites
